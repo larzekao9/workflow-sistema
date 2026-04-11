@@ -1,0 +1,414 @@
+# Sistema Workflow — Gestión de Políticas de Negocio
+
+## Qué es este sistema
+Plataforma web y móvil para diseñar, ejecutar y monitorear
+políticas de negocio y trámites administrativos mediante
+workflows visuales e inteligencia artificial.
+
+## Estructura del proyecto
+workflow-sistema/
+  backend/      → Java 21 + Spring Boot 3 + MongoDB
+  frontend/     → Angular 17 + TypeScript + Angular Material
+  ai-service/   → Python 3.11 + FastAPI + Anthropic API
+  skills/       → recetas de trabajo reutilizables
+
+## Base de datos
+MongoDB Atlas. Colecciones:
+- usuarios
+- roles
+- politicas
+- actividades
+- tramites
+- historial_tramites
+- formularios
+
+## Comunicación entre servicios
+- frontend consume backend en http://localhost:8080
+- backend consume ai-service en http://localhost:8001
+- Toda comunicación es HTTP + JSON
+- JWT en cada request al backend
+
+## Reglas globales que nunca se rompen
+- Backend: nunca exponer documentos MongoDB directamente, siempre DTOs
+- Frontend: URLs del backend siempre en environment.ts
+- AI service: lógica de IA en services/, nunca en routers/
+- Errores manejados en cada capa, nunca silenciados
+- Código en inglés, comentarios en español si son necesarios
+
+## Subagentes disponibles
+- backend-spring   → todo lo que es Java y Spring Boot
+- frontend-angular → todo lo que es Angular y TypeScript
+- ai-fastapi       → todo lo que es FastAPI y Python
+- db-modeler       → diseño de colecciones MongoDB
+- qa-reviewer      → revisión al cerrar cada fase
+
+## Skills disponibles
+- skills/create-backend-module.md
+- skills/create-angular-crud.md
+- skills/build-ai-endpoint.md
+- skills/generate-use-case.md
+
+## Fases de desarrollo
+1. Autenticación + usuarios + roles (backend)
+2. Políticas de negocio + actividades + flujos (backend)
+3. Trámites + ejecución del workflow + historial (backend)
+4. Panel web Angular conectado al backend
+5. Microservicio IA con FastAPI
+6. Deploy en nube + pruebas finales
+
+
+
+# Proyecto: Sistema Workflow para Gestión de Políticas de Negocio
+
+## Descripción general del proyecto
+
+Este proyecto consiste en desarrollar un **sistema workflow** orientado a la **gestión de políticas de negocio y trámites administrativos**, con enfoque en la automatización, visualización y seguimiento de procesos dentro de una organización.
+
+La idea central es que una institución pueda **definir cómo se mueve un trámite o solicitud entre distintas áreas**, bajo reglas claras, responsables definidos y actividades controladas por el sistema. En lugar de manejar los procesos de forma manual, dispersa o informal, el software permitirá modelarlos, ejecutarlos, monitorearlos y mejorarlos.
+
+## Problema que busca resolver
+
+Actualmente, muchos trámites administrativos pasan por varios departamentos sin trazabilidad clara. Por ejemplo, una persona solicita un medidor, atención al cliente recibe la solicitud, luego pasa a verificación de viabilidad, después a facturación, legal, almacén u otras áreas. En este recorrido:
+
+* no siempre se sabe en qué estado está el trámite,
+* no siempre se identifica quién es el responsable actual,
+* existen retrasos,
+* se generan cuellos de botella,
+* y el ciudadano o cliente no puede consultar fácilmente por dónde va su solicitud.
+
+El sistema propuesto busca resolver esto mediante un **workflow configurable**, donde las políticas de negocio definan el flujo exacto que debe seguir cada trámite.
+
+## Concepto central del sistema
+
+El proyecto no es solo un sistema de formularios ni solo un editor de diagramas. Es un **sistema integral de workflow con motor de políticas de negocio**, donde:
+
+1. **Los administradores diseñan políticas de negocio**.
+2. **Cada política define actividades, responsables, decisiones y rutas de flujo**.
+3. **Los funcionarios ejecutan las tareas que el sistema les asigna**.
+4. **El sistema registra todo el recorrido del trámite en tiempo real**.
+5. **La organización puede visualizar estados, tiempos, retrasos y cuellos de botella**.
+6. **El usuario final o atención al cliente puede consultar el avance del trámite**.
+
+En palabras simples: es una plataforma para **diseñar, ejecutar, controlar y analizar procesos administrativos personalizados**.
+
+## Qué son las políticas de negocio en este proyecto
+
+En este proyecto, una **política de negocio** es el conjunto de reglas que define:
+
+* qué actividades deben ejecutarse,
+* en qué orden,
+* qué departamento o rol es responsable,
+* qué datos se deben pedir,
+* qué formularios deben completarse,
+* qué decisiones cambian el rumbo del proceso,
+* y cuándo un trámite puede avanzar, detenerse, regresar o finalizar.
+
+Estas políticas no serán fijas en código únicamente, sino que el sistema debe permitir que se **diseñen y gestionen de forma visual y configurable**.
+
+## Ejemplo del flujo de negocio
+
+Un caso representativo del proyecto es el siguiente:
+
+1. Un ciudadano o cliente solicita un medidor.
+2. La solicitud entra por un canal web o presencial.
+3. Atención al cliente registra el trámite y solicita requisitos.
+4. El trámite pasa a un área técnica o de verificación.
+5. Se analiza si la solicitud es viable.
+6. Luego puede pasar a facturación.
+7. Después a legal.
+8. Luego a almacén.
+9. Y así sucesivamente hasta completar el proceso.
+
+La política de negocio define exactamente ese recorrido.
+
+Además, si después de varios días el cliente pregunta por su trámite, el sistema debe permitir saber:
+
+* en qué etapa se encuentra,
+* quién lo tiene asignado,
+* qué actividades ya se ejecutaron,
+* cuáles están en proceso,
+* y cuáles están pendientes.
+
+## Funcionalidades principales del sistema
+
+### 1. Editor visual de políticas de negocio
+
+El sistema debe incluir un editor para crear políticas de negocio como si fueran **diagramas de actividades**. Este editor debe permitir modelar flujos de trabajo de forma clara y visual.
+
+Debe soportar al menos:
+
+* actividades o tareas,
+* responsables,
+* formularios asociados,
+* decisiones,
+* estados,
+* conexiones entre pasos,
+* inicio y fin del proceso.
+
+Además, el flujo debe soportar distintas variantes:
+
+* **flujo lineal**,
+* **flujo alternativo**,
+* **flujo iterativo**,
+* **flujo paralelo**.
+
+### 2. Gestión automática de trámites
+
+Una vez diseñada la política, el sistema debe ser capaz de ejecutar automáticamente el flujo, asignando cada actividad al rol o área correspondiente.
+
+Esto implica que el sistema debe:
+
+* crear instancias de trámite,
+* moverlas entre etapas,
+* registrar cambios de estado,
+* asignar responsables,
+* validar requisitos,
+* y guardar evidencias o formularios completados.
+
+### 3. Visualización del estado del trámite
+
+Cada funcionario debería poder visualizar el estado de los procesos en tiempo real, sin depender de recargas manuales o procesos pesados en backend.
+
+Como mínimo, el sistema debe mostrar:
+
+* actividades ya ejecutadas,
+* actividades en proceso,
+* actividades sin atender o pendientes.
+
+La experiencia debe ser **visual, en línea y trazable**.
+
+### 4. Formularios dinámicos y automatizados
+
+Dentro de cada política de negocio, el administrador debe poder definir formularios o cuestionarios que aparecerán cuando una actividad lo requiera.
+
+Esto permitirá que el funcionario registre la información necesaria según el punto exacto del flujo. Así, no todos los trámites pedirán lo mismo en todos los pasos; dependerá de la política diseñada.
+
+### 5. Registro de actividad de funcionarios
+
+El funcionario debe registrar lo que está haciendo dentro del sistema. Esto permite:
+
+* trazabilidad,
+* control de ejecución,
+* auditoría,
+* medición de tiempos,
+* identificación de retrasos.
+
+### 6. Detección de cuellos de botella
+
+El sistema debe incorporar análisis operacional para identificar:
+
+* pasos donde los trámites se retrasan,
+* tiempos promedio por actividad,
+* áreas con mayor carga,
+* cuellos de botella,
+* puntos de mejora del proceso.
+
+### 7. Seguimiento para atención al cliente
+
+Atención al cliente debe poder responder con precisión por dónde va un trámite. Por eso el sistema debe brindar una vista resumida del recorrido, estado actual y responsable asignado.
+
+### 8. Colaboración y sincronización en tiempo real
+
+El prototipo debe demostrar **sincronización en tiempo real entre múltiples usuarios**, especialmente porque el diseño colaborativo y el seguimiento simultáneo son parte importante del valor del sistema.
+
+### 9. Interacción inteligente humano-máquina
+
+Un rasgo diferenciador del proyecto es que el usuario pueda construir o modificar diagramas mediante **comandos por voz o texto**, en lugar de depender solo de arrastrar elementos manualmente.
+
+Esto abre la puerta a una integración de IA para:
+
+* interpretar instrucciones en lenguaje natural,
+* sugerir estructuras de flujo,
+* generar formularios,
+* asistir en la construcción de políticas,
+* resumir procesos,
+* y apoyar la productividad del usuario.
+
+## Roles del sistema
+
+El sistema contempla al menos dos grandes tipos de rol:
+
+### 1. Diseñadores o administradores de políticas
+
+Son quienes crean y configuran las políticas de negocio. Definen:
+
+* el flujo,
+* los responsables,
+* las reglas,
+* los formularios,
+* y las restricciones del proceso.
+
+### 2. Funcionarios u operadores
+
+Son quienes ejecutan las actividades del workflow en el día a día. Reciben tareas, completan formularios, registran acciones y hacen avanzar el trámite.
+
+También puede considerarse un rol adicional para:
+
+* atención al cliente,
+* supervisores,
+* analistas,
+* administradores técnicos.
+
+## Reglas importantes del negocio
+
+El sistema debe respetar restricciones claras. Por ejemplo:
+
+* una política de negocio no debería editarse libremente si ya tiene trámites activos,
+* los formularios deben aparecer solo cuando la actividad lo requiera,
+* cada cambio de estado debe quedar registrado,
+* cada tarea debe tener un responsable definido,
+* el flujo debe ser trazable de inicio a fin.
+
+Estas reglas son esenciales porque convierten el sistema en un motor real de políticas de negocio, no solo en una maqueta visual.
+
+## Enfoque tecnológico del proyecto
+
+El proyecto se desarrollará con una arquitectura basada en microservicios y con tecnologías modernas, separando responsabilidades por dominio.
+
+### Stack tecnológico definido
+
+* **Backend principal:** Spring Boot
+* **Módulo de inteligencia artificial:** Python + FastAPI
+* **Frontend web administrativo:** Angular
+* **Frontend móvil o multiplataforma:** Flutter
+* **Base de datos:** MongoDB
+
+## Justificación del stack
+
+### Spring Boot
+
+Se utilizará para construir los microservicios principales del negocio, por ejemplo:
+
+* gestión de usuarios y roles,
+* gestión de políticas,
+* gestión de trámites,
+* auditoría,
+* notificaciones,
+* seguimiento de estados.
+
+### Python + FastAPI
+
+Se utilizará para los componentes de inteligencia artificial, especialmente para:
+
+* procesamiento de lenguaje natural,
+* interpretación de comandos de voz o texto,
+* generación asistida de diagramas o formularios,
+* análisis de datos del flujo,
+* detección de patrones o cuellos de botella.
+
+### Angular
+
+Se empleará para el panel web donde los administradores y funcionarios puedan:
+
+* diseñar políticas,
+* visualizar diagramas,
+* gestionar tareas,
+* consultar estados,
+* analizar reportes.
+
+### Flutter
+
+Servirá para una aplicación móvil o multiplataforma, útil para consulta, ejecución de tareas, notificaciones o seguimiento de trámites desde distintos dispositivos.
+
+### MongoDB
+
+Se adapta bien porque el sistema manejará:
+
+* estructuras dinámicas de formularios,
+* políticas configurables,
+* documentos de trámite,
+* bitácoras de eventos,
+* datos semiestructurados.
+
+## Enfoque de arquitectura
+
+La arquitectura propuesta es de **microservicios**, porque el sistema tiene varios módulos con responsabilidades distintas y posibilidad de crecer en complejidad.
+
+Ejemplos de microservicios posibles:
+
+* microservicio de autenticación y usuarios,
+* microservicio de políticas de negocio,
+* microservicio de motor workflow,
+* microservicio de formularios,
+* microservicio de seguimiento y trazabilidad,
+* microservicio de analítica,
+* microservicio de IA.
+
+Este enfoque favorece:
+
+* escalabilidad,
+* mantenimiento,
+* despliegue independiente,
+* integración de IA de forma desacoplada,
+* evolución progresiva del sistema.
+
+## Requisitos académicos del examen
+
+El proyecto forma parte del **primer examen parcial** de la materia de ingeniería de software, por lo que no solo importa que funcione, sino también que esté bien fundamentado desde la disciplina.
+
+La evaluación se apoya en cuatro pilares:
+
+### 1. Documentación teórica
+
+Se debe presentar documentación que explique el proyecto con base en teoría de ingeniería de software.
+
+### 2. Calidad del producto
+
+El sistema debe ser funcional, claro, escalable y coherente con los requerimientos planteados.
+
+### 3. Rigor del proceso de ingeniería
+
+Debe demostrarse el uso de metodologías formales como:
+
+* **Proceso Unificado**,
+* **UML**,
+* modelado de casos de uso,
+* diagramas de actividades,
+* análisis, diseño e implementación estructurada.
+
+### 4. Autoría y defensa del código
+
+Habrá una **defensa en vivo**, donde los estudiantes deberán demostrar que dominan el sistema y que realmente desarrollaron el software, realizando modificaciones directas durante la evaluación.
+
+## Requisitos de calidad exigidos por el docente
+
+El docente exige que el proyecto tenga:
+
+* escalabilidad,
+* funcionamiento real,
+* estructura técnica clara,
+* despliegue en la nube,
+* integración de componentes reutilizables,
+* incorporación de inteligencia artificial,
+* coherencia entre teoría, diseño e implementación.
+
+## Despliegue esperado
+
+El sistema debe estar preparado para desplegarse en la nube, en plataformas como:
+
+* **AWS**,
+* **Azure**,
+* **Google Cloud**.
+
+Esto refuerza el enfoque profesional del proyecto y su orientación a software moderno y escalable.
+
+## Objetivo del prototipo
+
+El objetivo no es únicamente presentar pantallas, sino construir un **prototipo funcional** que demuestre:
+
+* modelado visual de políticas,
+* ejecución de workflows,
+* trazabilidad de trámites,
+* estados en tiempo real,
+* colaboración entre usuarios,
+* automatización de formularios,
+* análisis de cuellos de botella,
+* apoyo de inteligencia artificial.
+
+## Resumen ejecutivo del proyecto
+
+En síntesis, el proyecto consiste en desarrollar un **sistema workflow inteligente para la gestión de políticas de negocio**, capaz de modelar procesos administrativos mediante diagramas visuales, ejecutar trámites entre distintas áreas, registrar responsables y estados, automatizar formularios, ofrecer seguimiento en tiempo real y aplicar inteligencia artificial para facilitar la construcción y análisis de los flujos. Todo ello debe realizarse con un enfoque formal de ingeniería de software, usando **Proceso Unificado, UML, microservicios, Spring Boot, Python con FastAPI, Angular, Flutter y MongoDB**, dentro de un prototipo funcional y defendible académicamente.
+
+## Versión corta del concepto
+
+**El proyecto es un sistema workflow con motor de políticas de negocio personalizables, diseñado para modelar, ejecutar, monitorear y optimizar trámites administrativos mediante flujos visuales, formularios dinámicos, seguimiento en tiempo real e integración de inteligencia artificial.**
