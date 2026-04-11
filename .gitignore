@@ -1,0 +1,4 @@
+# Ignorar archivos y directorios de Claude
+.claude/
+CLAUDE.md
+CLAUDE. local.md 
