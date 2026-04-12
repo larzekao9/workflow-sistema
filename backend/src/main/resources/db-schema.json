@@ -1,0 +1,469 @@
+{
+  "_meta": {
+    "sistema": "workflow-sistema",
+    "base_de_datos": "MongoDB Atlas",
+    "version_esquema": "1.0.0",
+    "fecha": "2026-04-12",
+    "autor": "db-modeler",
+    "nota": "Esquema de referencia para implementacion de @Document (Spring Boot) y modelos Pydantic (AI service). Todos los IDs son ObjectId de MongoDB a menos que se indique lo contrario."
+  },
+
+  "colecciones": {
+
+    "roles": {
+      "_descripcion": "Catálogo de roles del sistema. Documento pequeño, muy reutilizado. Se referencia por ID desde usuarios y actividades.",
+      "documento_ejemplo": {
+        "_id": { "$oid": "64a1f2e3c4d5e6f7a8b9c0d1" },
+        "nombre": "FUNCIONARIO",
+        "descripcion": "Ejecuta tareas asignadas por el motor de workflow",
+        "permisos": [
+          "tramite:avanzar",
+          "tramite:rechazar",
+          "tramite:ver",
+          "formulario:completar"
+        ],
+        "activo": true,
+        "creado_en": { "$date": "2026-01-10T08:00:00Z" },
+        "actualizado_en": { "$date": "2026-01-10T08:00:00Z" }
+      },
+      "decisiones_modelo": {
+        "permisos": "EMBEBIDO como array de strings. Los permisos son propios del rol y no tienen entidad independiente. Su tamaño es acotado y estable.",
+        "referencia_desde_usuarios": "Los usuarios referencian el rol por _id. Un rol es reutilizado por N usuarios, si se embebiera habría que actualizar todos los documentos usuario al cambiar un permiso."
+      },
+      "campos_obligatorios": ["_id", "nombre", "activo", "creado_en"],
+      "campos_opcionales": ["descripcion", "permisos"],
+      "indices": [
+        {
+          "campo": "nombre",
+          "tipo": "unique",
+          "justificacion": "El nombre del rol es el identificador de negocio. Se consulta al autenticar para cargar permisos (query: { nombre: 'FUNCIONARIO' }). Unique garantiza integridad."
+        },
+        {
+          "campo": "activo",
+          "tipo": "ascending",
+          "justificacion": "Filtro frecuente al listar roles disponibles para asignar en actividades y al crear usuarios."
+        }
+      ]
+    },
+
+    "usuarios": {
+      "_descripcion": "Personas que interactúan con el sistema. Cada usuario tiene exactamente un rol principal. La contraseña se almacena como hash bcrypt, nunca en texto plano.",
+      "documento_ejemplo": {
+        "_id": { "$oid": "64a1f2e3c4d5e6f7a8b9c0d2" },
+        "username": "jperez",
+        "email": "jperez@organismo.gob",
+        "password_hash": "$2a$12$KIXxyz...",
+        "nombre_completo": "Juan Pérez",
+        "rol_id": { "$oid": "64a1f2e3c4d5e6f7a8b9c0d1" },
+        "departamento": "Dirección de Trámites Ciudadanos",
+        "activo": true,
+        "ultimo_acceso": { "$date": "2026-04-11T14:32:00Z" },
+        "creado_en": { "$date": "2026-01-15T09:00:00Z" },
+        "actualizado_en": { "$date": "2026-04-11T14:32:00Z" }
+      },
+      "decisiones_modelo": {
+        "rol_id": "REFERENCIA a roles._id. Un rol es una entidad de catálogo que existe independientemente del usuario. Si el rol cambia de permisos, el cambio es global sin tocar el documento usuario.",
+        "departamento": "EMBEBIDO como string. Es solo un dato descriptivo del usuario, no una entidad con comportamiento propio en este sistema.",
+        "password_hash": "Campo sensible. El backend NUNCA debe incluirlo en el DTO de respuesta. Se declara @JsonIgnore en Spring y se excluye del schema Pydantic de respuesta."
+      },
+      "campos_obligatorios": ["_id", "username", "email", "password_hash", "nombre_completo", "rol_id", "activo", "creado_en"],
+      "campos_opcionales": ["departamento", "ultimo_acceso"],
+      "indices": [
+        {
+          "campo": "email",
+          "tipo": "unique",
+          "justificacion": "Login principal por email. Query de autenticación: { email: 'x@y.com' }. Unique por integridad de negocio."
+        },
+        {
+          "campo": "username",
+          "tipo": "unique",
+          "justificacion": "Identificador alternativo. Se usa en búsquedas internas de asignación de responsables en actividades."
+        },
+        {
+          "campo": "rol_id",
+          "tipo": "ascending",
+          "justificacion": "Query frecuente: listar todos los usuarios con rol FUNCIONARIO para asignar como responsables en actividades."
+        },
+        {
+          "campo": "activo",
+          "tipo": "ascending",
+          "justificacion": "Filtro estándar en todos los listados. Solo se muestran usuarios activos."
+        }
+      ]
+    },
+
+    "formularios": {
+      "_descripcion": "Definiciones reutilizables de formularios dinámicos. Un formulario describe la estructura de campos. Se asocia a una actividad dentro de una política. Se define como entidad separada porque el mismo formulario podría reutilizarse en múltiples actividades o políticas.",
+      "documento_ejemplo": {
+        "_id": { "$oid": "64a1f2e3c4d5e6f7a8b9c0d3" },
+        "nombre": "Formulario de Solicitud de Licencia",
+        "descripcion": "Captura los datos iniciales del solicitante para el trámite de licencia de conducir",
+        "version": 2,
+        "campos": [
+          {
+            "id": "campo_dni",
+            "etiqueta": "Número de DNI",
+            "tipo": "TEXT",
+            "requerido": true,
+            "validaciones": [
+              { "tipo": "REGEX", "valor": "^[0-9]{7,8}$", "mensaje": "El DNI debe tener entre 7 y 8 dígitos" }
+            ],
+            "orden": 1
+          },
+          {
+            "id": "campo_fecha_nacimiento",
+            "etiqueta": "Fecha de Nacimiento",
+            "tipo": "DATE",
+            "requerido": true,
+            "validaciones": [
+              { "tipo": "MIN_AGE", "valor": "18", "mensaje": "Debe ser mayor de edad" }
+            ],
+            "orden": 2
+          },
+          {
+            "id": "campo_categoria",
+            "etiqueta": "Categoría de Licencia",
+            "tipo": "SELECT",
+            "requerido": true,
+            "opciones": ["A", "B", "C", "D", "E"],
+            "validaciones": [],
+            "orden": 3
+          },
+          {
+            "id": "campo_observaciones",
+            "etiqueta": "Observaciones",
+            "tipo": "TEXTAREA",
+            "requerido": false,
+            "validaciones": [],
+            "orden": 4
+          }
+        ],
+        "activo": true,
+        "creado_por": { "$oid": "64a1f2e3c4d5e6f7a8b9c0d2" },
+        "creado_en": { "$date": "2026-02-01T10:00:00Z" },
+        "actualizado_en": { "$date": "2026-02-10T11:00:00Z" }
+      },
+      "decisiones_modelo": {
+        "campos": "EMBEBIDO como array de subdocumentos. Los campos son intrínsecos al formulario, no tienen existencia independiente. Su cantidad es acotada (estimado máximo 50 campos por formulario).",
+        "validaciones_por_campo": "EMBEBIDO dentro de cada campo. Las validaciones son configuración pura del campo, no entidades reutilizables.",
+        "opciones_select": "EMBEBIDO en el campo. Son valores fijos de negocio para ese campo específico.",
+        "creado_por": "REFERENCIA a usuarios._id. Solo necesitamos saber quién lo creó, no embeber todo el usuario.",
+        "version": "Campo entero incremental. Permite que una actividad especifique la versión del formulario que debe usar, soportando evolución sin romper trámites en curso."
+      },
+      "tipos_de_campo_validos": ["TEXT", "NUMBER", "DATE", "DATETIME", "SELECT", "MULTISELECT", "TEXTAREA", "CHECKBOX", "FILE", "EMAIL", "PHONE"],
+      "tipos_de_validacion_validos": ["REGEX", "MIN_LENGTH", "MAX_LENGTH", "MIN_VALUE", "MAX_VALUE", "MIN_AGE", "REQUIRED"],
+      "campos_obligatorios": ["_id", "nombre", "version", "campos", "activo", "creado_por", "creado_en"],
+      "campos_opcionales": ["descripcion"],
+      "indices": [
+        {
+          "campo": "nombre",
+          "tipo": "ascending + text",
+          "justificacion": "Búsqueda de formularios por nombre al configurar actividades en el editor visual. Se usa tanto para búsqueda exacta como por texto parcial."
+        },
+        {
+          "campo": "activo",
+          "tipo": "ascending",
+          "justificacion": "Solo se ofrecen formularios activos al diseñador al configurar actividades."
+        }
+      ]
+    },
+
+    "actividades": {
+      "_descripcion": "Definición de un paso o nodo dentro de un flujo de trabajo. Las actividades son entidades de catálogo reutilizables que se vinculan a políticas mediante referencias. Cada actividad define su tipo de flujo, el rol responsable y opcionalmente un formulario.",
+      "documento_ejemplo": {
+        "_id": { "$oid": "64a1f2e3c4d5e6f7a8b9c0d4" },
+        "nombre": "Validación de Documentos",
+        "descripcion": "El funcionario verifica que la documentación presentada sea válida y completa",
+        "tipo": "LINEAL",
+        "rol_responsable_id": { "$oid": "64a1f2e3c4d5e6f7a8b9c0d1" },
+        "formulario_id": { "$oid": "64a1f2e3c4d5e6f7a8b9c0d3" },
+        "formulario_version": 2,
+        "tiempo_limite_horas": 48,
+        "acciones_disponibles": ["APROBAR", "RECHAZAR", "SOLICITAR_CORRECCION"],
+        "metadatos_visuales": {
+          "posicion_x": 320,
+          "posicion_y": 150,
+          "color": "#4A90D9",
+          "icono": "check-circle"
+        },
+        "activo": true,
+        "creado_en": { "$date": "2026-02-05T10:00:00Z" },
+        "actualizado_en": { "$date": "2026-02-05T10:00:00Z" }
+      },
+      "decisiones_modelo": {
+        "tipo_actividad": "LINEAL, ALTERNATIVA, PARALELA o ITERATIVA. El motor de workflow usa este campo para decidir el algoritmo de avance del trámite.",
+        "rol_responsable_id": "REFERENCIA a roles._id. El rol es una entidad de catálogo. Si la actividad embebiera el rol y el rol cambiara, habría inconsistencias.",
+        "formulario_id + formulario_version": "REFERENCIA a formularios._id. El formulario es una entidad independiente reutilizable. Se guarda también la versión para que el motor sirva exactamente esa versión del formulario aunque el formulario evolucione.",
+        "metadatos_visuales": "EMBEBIDO. Son datos de presentación del editor visual (posición en el canvas, color, icono). No tienen entidad propia ni son consultados por el motor.",
+        "acciones_disponibles": "EMBEBIDO como array de strings. Define qué puede hacer el funcionario sobre esta actividad. Es configuración interna de la actividad.",
+        "tiempo_limite_horas": "Campo opcional para alertas y detección de cuellos de botella en el módulo de análisis operacional."
+      },
+      "tipos_validos": ["LINEAL", "ALTERNATIVA", "PARALELA", "ITERATIVA"],
+      "acciones_validas": ["APROBAR", "RECHAZAR", "SOLICITAR_CORRECCION", "DERIVAR", "FINALIZAR"],
+      "campos_obligatorios": ["_id", "nombre", "tipo", "rol_responsable_id", "activo", "creado_en"],
+      "campos_opcionales": ["descripcion", "formulario_id", "formulario_version", "tiempo_limite_horas", "acciones_disponibles", "metadatos_visuales"],
+      "indices": [
+        {
+          "campo": "nombre",
+          "tipo": "text",
+          "justificacion": "Búsqueda full-text al agregar actividades en el editor visual de políticas."
+        },
+        {
+          "campo": "tipo",
+          "tipo": "ascending",
+          "justificacion": "Filtro en el editor al listar actividades disponibles por tipo. También usado por el motor al procesar avances."
+        },
+        {
+          "campo": "rol_responsable_id",
+          "tipo": "ascending",
+          "justificacion": "Query del motor: encontrar todas las actividades asignadas a un rol para construir la bandeja de tareas del funcionario."
+        },
+        {
+          "campo": "activo",
+          "tipo": "ascending",
+          "justificacion": "Solo se muestran actividades activas en el editor de políticas."
+        }
+      ]
+    },
+
+    "politicas": {
+      "_descripcion": "Definición completa de un workflow de negocio. Contiene la estructura del flujo: nodos (actividades referenciadas) y transiciones (embebidas). Es el documento más central del sistema. Las transiciones se embeban porque son la topología del grafo y no tienen significado fuera de esta política.",
+      "documento_ejemplo": {
+        "_id": { "$oid": "64a1f2e3c4d5e6f7a8b9c0d5" },
+        "nombre": "Licencia de Conducir Categoría B",
+        "descripcion": "Proceso completo para la obtención de licencia de conducir de primera vez, categoría B",
+        "version": 1,
+        "estado": "PUBLISHED",
+        "actividad_inicial_id": { "$oid": "64a1f2e3c4d5e6f7a8b9c0d4" },
+        "actividades_ids": [
+          { "$oid": "64a1f2e3c4d5e6f7a8b9c0d4" },
+          { "$oid": "64a1f2e3c4d5e6f7a8b9c0d6" },
+          { "$oid": "64a1f2e3c4d5e6f7a8b9c0d7" }
+        ],
+        "transiciones": [
+          {
+            "id": "t1",
+            "origen_actividad_id": { "$oid": "64a1f2e3c4d5e6f7a8b9c0d4" },
+            "destino_actividad_id": { "$oid": "64a1f2e3c4d5e6f7a8b9c0d6" },
+            "accion_disparadora": "APROBAR",
+            "condicion": null,
+            "etiqueta": "Documentos válidos"
+          },
+          {
+            "id": "t2",
+            "origen_actividad_id": { "$oid": "64a1f2e3c4d5e6f7a8b9c0d4" },
+            "destino_actividad_id": null,
+            "accion_disparadora": "RECHAZAR",
+            "condicion": null,
+            "etiqueta": "Documentación incompleta",
+            "es_fin": true
+          },
+          {
+            "id": "t3",
+            "origen_actividad_id": { "$oid": "64a1f2e3c4d5e6f7a8b9c0d6" },
+            "destino_actividad_id": { "$oid": "64a1f2e3c4d5e6f7a8b9c0d7" },
+            "accion_disparadora": "APROBAR",
+            "condicion": {
+              "campo": "campo_categoria",
+              "operador": "IN",
+              "valor": ["B", "C"]
+            },
+            "etiqueta": "Categoría estándar aprobada"
+          }
+        ],
+        "tramites_activos_count": 12,
+        "congelado_en": null,
+        "publicado_en": { "$date": "2026-03-01T00:00:00Z" },
+        "creado_por": { "$oid": "64a1f2e3c4d5e6f7a8b9c0d2" },
+        "creado_en": { "$date": "2026-02-15T09:00:00Z" },
+        "actualizado_en": { "$date": "2026-03-01T00:00:00Z" }
+      },
+      "decisiones_modelo": {
+        "transiciones": "EMBEBIDO como array de subdocumentos. Las transiciones son la topología del grafo de esta política específica. No tienen significado fuera de esta política y no son reutilizadas por otras colecciones. Máximo estimado: 100 transiciones por política.",
+        "actividades_ids": "REFERENCIA array de ObjectId a actividades._id. Las actividades son entidades independientes reutilizables entre políticas. Si se embebieran, un cambio en una actividad (ej: cambio de rol responsable) requeriría actualizar todas las políticas que la usen.",
+        "actividad_inicial_id": "REFERENCIA explícita al nodo de entrada del grafo. El motor lo usa para instanciar el trámite.",
+        "condicion_en_transicion": "EMBEBIDO en cada transición. Describe la condición lógica que debe cumplirse para seguir ese camino (usado en flujos ALTERNATIVOS). Podría evolucionar a un subdocumento más complejo sin romper el esquema.",
+        "tramites_activos_count": "Campo denormalizado. El motor lo incrementa/decrementa con cada instancia creada/finalizada. Permite verificar si se puede congelar la política en O(1) sin hacer un count de tramites.",
+        "estado_FROZEN": "Cuando tramites_activos_count > 0 y se intenta editar estructuralmente, el backend cambia estado a FROZEN. El editor visual bloquea edición. Estados: DRAFT → PUBLISHED → FROZEN (FROZEN puede volver a PUBLISHED solo si tramites_activos_count llega a 0).",
+        "version": "Entero incremental. Si en el futuro se implementa versionado completo (clonar política en nueva versión), este campo soporta esa lógica sin cambios de esquema."
+      },
+      "estados_validos": ["DRAFT", "PUBLISHED", "FROZEN"],
+      "campos_obligatorios": ["_id", "nombre", "version", "estado", "actividades_ids", "transiciones", "tramites_activos_count", "creado_por", "creado_en"],
+      "campos_opcionales": ["descripcion", "actividad_inicial_id", "condicion", "congelado_en", "publicado_en"],
+      "indices": [
+        {
+          "campo": "nombre",
+          "tipo": "text",
+          "justificacion": "Búsqueda por nombre en el panel de administración de políticas."
+        },
+        {
+          "campo": "estado",
+          "tipo": "ascending",
+          "justificacion": "Filtro principal en el listado de políticas: solo ver PUBLISHED para instanciar trámites, solo ver DRAFT para editar. Query del motor: { estado: 'PUBLISHED' }."
+        },
+        {
+          "campo": "creado_por",
+          "tipo": "ascending",
+          "justificacion": "Listado de políticas creadas por un administrador específico."
+        },
+        {
+          "compuesto": ["estado", "tramites_activos_count"],
+          "tipo": "ascending",
+          "justificacion": "Query del proceso de congelamiento: { estado: 'PUBLISHED', tramites_activos_count: { $gt: 0 } }. Este índice compuesto cubre ese query en una sola operación."
+        }
+      ]
+    },
+
+    "tramites": {
+      "_descripcion": "Instancia en ejecución de una política publicada. Representa un caso real de un ciudadano o cliente recorriendo el flujo. Es el documento más dinámico del sistema: cambia de estado, de actividad activa y acumula datos de formularios con cada avance del motor.",
+      "documento_ejemplo": {
+        "_id": { "$oid": "64a1f2e3c4d5e6f7a8b9c0d8" },
+        "numero_tramite": "TRM-2026-000042",
+        "politica_id": { "$oid": "64a1f2e3c4d5e6f7a8b9c0d5" },
+        "politica_nombre_snapshot": "Licencia de Conducir Categoría B",
+        "politica_version_snapshot": 1,
+        "estado": "EN_PROGRESO",
+        "actividad_actual_id": { "$oid": "64a1f2e3c4d5e6f7a8b9c0d4" },
+        "solicitante": {
+          "nombre": "María González",
+          "email": "mgonzalez@email.com",
+          "dni": "38291847",
+          "telefono": "+54 11 4567-8901"
+        },
+        "asignado_a": { "$oid": "64a1f2e3c4d5e6f7a8b9c0d2" },
+        "datos_formularios": {
+          "64a1f2e3c4d5e6f7a8b9c0d3": {
+            "campo_dni": "38291847",
+            "campo_fecha_nacimiento": "1995-07-22",
+            "campo_categoria": "B",
+            "campo_observaciones": "",
+            "completado_en": { "$date": "2026-04-10T09:30:00Z" },
+            "completado_por": { "$oid": "64a1f2e3c4d5e6f7a8b9c0d2" }
+          }
+        },
+        "prioridad": "NORMAL",
+        "fecha_inicio": { "$date": "2026-04-09T08:00:00Z" },
+        "fecha_limite": { "$date": "2026-04-23T08:00:00Z" },
+        "fecha_fin": null,
+        "creado_por": { "$oid": "64a1f2e3c4d5e6f7a8b9c0d2" },
+        "creado_en": { "$date": "2026-04-09T08:00:00Z" },
+        "actualizado_en": { "$date": "2026-04-10T09:30:00Z" }
+      },
+      "decisiones_modelo": {
+        "politica_id": "REFERENCIA a politicas._id. El trámite está vinculado a la política que lo define.",
+        "politica_nombre_snapshot + politica_version_snapshot": "DESNORMALIZACION INTENCIONAL. Se guardan el nombre y versión de la política al momento de crear el trámite. Si la política es renombrada o congelada, el trámite conserva el contexto histórico sin hacer joins.",
+        "actividad_actual_id": "REFERENCIA a actividades._id. El motor actualiza este campo con cada avance. Es el puntero de posición en el grafo.",
+        "solicitante": "EMBEBIDO como subdocumento. Los datos del solicitante son propios del trámite. El solicitante puede ser un ciudadano externo sin cuenta en el sistema.",
+        "asignado_a": "REFERENCIA a usuarios._id. El funcionario asignado a resolver la actividad actual. Cambia con cada avance del motor.",
+        "datos_formularios": "EMBEBIDO como mapa clave=formulario_id, valor=respuestas. Los datos llenados en cada formulario pertenecen exclusivamente a este trámite. El mapa crece a medida que el trámite avanza por actividades que tienen formularios. Cada entrada incluye metadata de quién y cuándo completó.",
+        "numero_tramite": "Identificador legible de negocio. Formato TRM-YYYY-NNNNNN. Se genera en el backend al crear el trámite. Indexado para búsqueda directa."
+      },
+      "estados_validos": ["PENDIENTE", "EN_PROGRESO", "PAUSADO", "FINALIZADO", "RECHAZADO", "CANCELADO"],
+      "prioridades_validas": ["BAJA", "NORMAL", "ALTA", "URGENTE"],
+      "campos_obligatorios": ["_id", "numero_tramite", "politica_id", "politica_nombre_snapshot", "politica_version_snapshot", "estado", "actividad_actual_id", "solicitante", "prioridad", "fecha_inicio", "creado_por", "creado_en"],
+      "campos_opcionales": ["asignado_a", "datos_formularios", "fecha_limite", "fecha_fin"],
+      "indices": [
+        {
+          "campo": "numero_tramite",
+          "tipo": "unique",
+          "justificacion": "Búsqueda directa por número de trámite desde atención al cliente y desde la app móvil. Query: { numero_tramite: 'TRM-2026-000042' }."
+        },
+        {
+          "campo": "estado",
+          "tipo": "ascending",
+          "justificacion": "Filtro principal en panel de funcionarios y supervisores. Query frecuente: { estado: 'EN_PROGRESO' }."
+        },
+        {
+          "campo": "politica_id",
+          "tipo": "ascending",
+          "justificacion": "El motor necesita contar trámites activos por política para el mecanismo de congelamiento. También para reportes: cuántos trámites de cada política están activos."
+        },
+        {
+          "campo": "asignado_a",
+          "tipo": "ascending",
+          "justificacion": "Bandeja de tareas del funcionario: { asignado_a: <usuario_id>, estado: { $in: ['PENDIENTE', 'EN_PROGRESO'] } }. Query más frecuente del sistema operativo."
+        },
+        {
+          "compuesto": ["politica_id", "estado"],
+          "tipo": "ascending",
+          "justificacion": "Para el contador de trámites activos por política: { politica_id: X, estado: { $in: ['PENDIENTE', 'EN_PROGRESO'] } }. Cubre tanto el congelamiento como los reportes de análisis operacional."
+        },
+        {
+          "compuesto": ["asignado_a", "estado"],
+          "tipo": "ascending",
+          "justificacion": "Índice compuesto para la bandeja de tareas del funcionario. Más eficiente que dos índices separados para el query más frecuente del sistema."
+        },
+        {
+          "campo": "fecha_inicio",
+          "tipo": "descending",
+          "justificacion": "Ordenamiento por defecto en listados: trámites más recientes primero. También usado por el módulo de análisis de tiempos."
+        }
+      ]
+    },
+
+    "historial_tramites": {
+      "_descripcion": "Bitácora de eventos append-only. NUNCA se modifica un documento existente. Cada acción sobre un trámite genera un nuevo documento independiente. Es la fuente de verdad para auditoría, trazabilidad legal y análisis operacional. Colección de solo inserción.",
+      "documento_ejemplo": {
+        "_id": { "$oid": "64a1f2e3c4d5e6f7a8b9c0d9" },
+        "tramite_id": { "$oid": "64a1f2e3c4d5e6f7a8b9c0d8" },
+        "numero_tramite_snapshot": "TRM-2026-000042",
+        "tipo_evento": "AVANCE",
+        "actividad_origen_id": { "$oid": "64a1f2e3c4d5e6f7a8b9c0d4" },
+        "actividad_origen_nombre_snapshot": "Validación de Documentos",
+        "actividad_destino_id": { "$oid": "64a1f2e3c4d5e6f7a8b9c0d6" },
+        "actividad_destino_nombre_snapshot": "Evaluación Técnica",
+        "accion": "APROBAR",
+        "ejecutado_por": { "$oid": "64a1f2e3c4d5e6f7a8b9c0d2" },
+        "ejecutado_por_nombre_snapshot": "Juan Pérez",
+        "comentario": "Documentación completa y vigente. Se procede a evaluación técnica.",
+        "datos_formulario_snapshot": {
+          "campo_dni": "38291847",
+          "campo_fecha_nacimiento": "1995-07-22",
+          "campo_categoria": "B"
+        },
+        "estado_tramite_anterior": "EN_PROGRESO",
+        "estado_tramite_posterior": "EN_PROGRESO",
+        "duracion_en_actividad_horas": 1.5,
+        "timestamp": { "$date": "2026-04-10T09:30:00Z" }
+      },
+      "decisiones_modelo": {
+        "append_only": "CRITICO: el backend debe exponer SOLO operaciones de inserción sobre esta colección. No existe endpoint de UPDATE ni DELETE para historial. El esquema de roles de MongoDB Atlas debe restringir UPDATE/DELETE a nivel de base de datos.",
+        "tramite_id": "REFERENCIA a tramites._id. El historial pertenece a un trámite pero es una colección separada porque puede crecer sin límite y su patrón de acceso es distinto (lecturas secuenciales por tramite, nunca aleatoriamente).",
+        "snapshots_de_nombres": "numero_tramite_snapshot, actividad_origen_nombre_snapshot, actividad_destino_nombre_snapshot, ejecutado_por_nombre_snapshot son DESNORMALIZACIONES INTENCIONALES. Si los datos maestros cambian en el futuro, el historial conserva el estado exacto en el momento del evento. Es un registro legal inmutable.",
+        "datos_formulario_snapshot": "EMBEBIDO. Captura el estado exacto de los datos del formulario EN EL MOMENTO del avance. Si el formulario o las respuestas se modificaran después (correcciones), el historial refleja qué datos tenía cuando se tomó la decisión.",
+        "duracion_en_actividad_horas": "Campo calculado por el motor al registrar el evento. Diferencia entre el timestamp del evento anterior en esa actividad y el actual. Permite análisis de cuellos de botella sin recalcular.",
+        "tipo_evento_variedad": "AVANCE, RECHAZO, CREACION, CANCELACION, ASIGNACION, COMENTARIO, CORRECCION_SOLICITADA. Permite filtrar el historial por tipo sin leer todos los registros."
+      },
+      "tipos_evento_validos": ["CREACION", "AVANCE", "RECHAZO", "CANCELACION", "ASIGNACION", "COMENTARIO", "CORRECCION_SOLICITADA", "PAUSA", "REANUDACION", "FINALIZACION"],
+      "campos_obligatorios": ["_id", "tramite_id", "numero_tramite_snapshot", "tipo_evento", "ejecutado_por", "ejecutado_por_nombre_snapshot", "estado_tramite_posterior", "timestamp"],
+      "campos_opcionales": ["actividad_origen_id", "actividad_origen_nombre_snapshot", "actividad_destino_id", "actividad_destino_nombre_snapshot", "accion", "comentario", "datos_formulario_snapshot", "estado_tramite_anterior", "duracion_en_actividad_horas"],
+      "indices": [
+        {
+          "campo": "tramite_id",
+          "tipo": "ascending",
+          "justificacion": "Query principal: obtener todo el historial de un trámite ordenado cronológicamente. { tramite_id: X, $sort: { timestamp: 1 } }. Es el acceso más frecuente."
+        },
+        {
+          "compuesto": ["tramite_id", "timestamp"],
+          "tipo": "ascending",
+          "justificacion": "Índice compuesto para la query canónica del historial: { tramite_id: X } ordenado por timestamp. MongoDB puede satisfacer sort y filter con un solo índice compuesto, evitando un sort en memoria."
+        },
+        {
+          "campo": "tipo_evento",
+          "tipo": "ascending",
+          "justificacion": "Filtros en panel de auditoría: ver solo eventos de tipo RECHAZO para análisis de cuellos de botella, o solo AVANCE para trazabilidad operativa."
+        },
+        {
+          "campo": "ejecutado_por",
+          "tipo": "ascending",
+          "justificacion": "Auditoría por usuario: todas las acciones tomadas por un funcionario específico. Requerimiento típico de auditorías administrativas."
+        },
+        {
+          "campo": "timestamp",
+          "tipo": "descending",
+          "justificacion": "Ordenamiento del feed de actividad reciente del sistema. También usado por el módulo de análisis para rangos de fechas: { timestamp: { $gte: inicio, $lte: fin } }."
+        }
+      ]
+    }
+  }
+}

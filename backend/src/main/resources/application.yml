@@ -1,0 +1,27 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: workflow-sistema
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27017/workflow_db}
+  jackson:
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:workflow-sistema-secret-key-dev-only-change-in-production}
+    expiration-ms: ${JWT_EXPIRATION:86400000}  # 24 horas
+  ai-service:
+    url: ${AI_SERVICE_URL:http://localhost:8001}
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:4200}
+
+logging:
+  level:
+    com.workflow: DEBUG
+    org.springframework.security: INFO
