@@ -78,6 +78,10 @@ public class Politica {
     @Builder.Default
     private Metadatos metadatos = new Metadatos();
 
+    // Requerido por relaciones de tipo ESCALAMIENTO: define el SLA máximo de la política en días
+    @Field("tiempo_limite_dias")
+    private Integer tiempoLimiteDias;
+
     @Field("creado_por_id")
     @Indexed
     private String creadoPorId;

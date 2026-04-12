@@ -8,10 +8,11 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { ReactiveFormsModule, FormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatIconModule } from '@angular/material/icon';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -21,9 +22,14 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatTableModule } from '@angular/material/table';
+import { MatChipsModule } from '@angular/material/chips';
 
 import { PoliticaService } from '../../shared/services/politica.service';
 import { ActividadService } from '../../shared/services/actividad.service';
+import { RoleService } from '../../shared/services/role.service';
+import { FormularioService } from '../../shared/services/formulario.service';
+import { FormularioResponse } from '../../shared/models/formulario.model';
 import { Politica } from '../../shared/models/politica.model';
 import {
   Actividad,
@@ -48,6 +54,14 @@ interface ConexionUI {
 }
 
 type PanelMode = 'none' | 'nodo' | 'conexion';
+type VistaEditor = 'grafo' | 'swimlane';
+
+// Columna del swimlane: un rol (o Sistema para nodos sin rol)
+interface SwimlaneLane {
+  rolId: string | null;   // null = columna "Sistema"
+  rolNombre: string;
+  actividades: NodoSVG[];
+}
 
 @Component({
   selector: 'app-flow-editor',
@@ -56,6 +70,7 @@ type PanelMode = 'none' | 'nodo' | 'conexion';
     CommonModule,
     RouterModule,
     ReactiveFormsModule,
+    FormsModule,
     MatCardModule,
     MatButtonModule,
     MatIconModule,
@@ -66,7 +81,10 @@ type PanelMode = 'none' | 'nodo' | 'conexion';
     MatSnackBarModule,
     MatProgressSpinnerModule,
     MatTooltipModule,
-    MatDialogModule
+    MatDialogModule,
+    MatButtonToggleModule,
+    MatTableModule,
+    MatChipsModule
   ],
   template: `
     <div class="editor-shell">
@@ -91,9 +109,25 @@ type PanelMode = 'none' | 'nodo' | 'conexion';
           <mat-icon *ngIf="!isSaving">save</mat-icon>
           Guardar
         </button>
+
+        <!-- Toggle de vista -->
+        <mat-button-toggle-group
+          [(ngModel)]="vistaActual"
+          aria-label="Vista del editor"
+          style="margin-left: 8px;">
+          <mat-button-toggle value="grafo" matTooltip="Vista grafo">
+            <mat-icon>account_tree</mat-icon>
+          </mat-button-toggle>
+          <mat-button-toggle value="swimlane" matTooltip="Vista swimlane">
+            <mat-icon>view_column</mat-icon>
+          </mat-button-toggle>
+        </mat-button-toggle-group>
       </div>
 
       <div class="editor-body" *ngIf="!isLoading; else loadingTpl">
+
+        <!-- ══ VISTA GRAFO (SVG existente) ════════════════════════════════ -->
+        <ng-container *ngIf="vistaActual === 'grafo'">
 
         <!-- Panel izquierdo: palette de nodos -->
         <div class="left-panel" *ngIf="politica?.estado === 'BORRADOR'">
@@ -293,6 +327,14 @@ type PanelMode = 'none' | 'nodo' | 'conexion';
                 <input matInput type="number" formControlName="tiempoLimiteHoras" min="0" />
               </mat-form-field>
 
+              <mat-form-field appearance="outline" class="full-width" *ngIf="selectedNodo.tipo === 'TAREA' || selectedNodo.tipo === 'INICIO'">
+                <mat-label>Formulario asociado</mat-label>
+                <mat-select formControlName="formularioId">
+                  <mat-option [value]="null">Sin formulario</mat-option>
+                  <mat-option *ngFor="let f of formularios" [value]="f.id">{{ f.nombre }}</mat-option>
+                </mat-select>
+              </mat-form-field>
+
               <button mat-raised-button color="primary" class="full-width" (click)="saveNodo()" [disabled]="nodoForm.invalid || isSavingNodo">
                 <mat-spinner *ngIf="isSavingNodo" diameter="16" style="display:inline-block;margin-right:6px"></mat-spinner>
                 Guardar nodo
@@ -306,6 +348,7 @@ type PanelMode = 'none' | 'nodo' | 'conexion';
               <p><strong>Descripción:</strong> {{ selectedNodo.descripcion || '—' }}</p>
               <p><strong>Rol:</strong> {{ selectedNodo.responsableRolId || '—' }}</p>
               <p><strong>Tiempo límite:</strong> {{ selectedNodo.tiempoLimiteHoras ? selectedNodo.tiempoLimiteHoras + 'h' : '—' }}</p>
+              <p><strong>Formulario:</strong> {{ getFormularioNombre(selectedNodo.formularioId) }}</p>
             </div>
 
             <!-- Transiciones salientes -->
@@ -363,6 +406,74 @@ type PanelMode = 'none' | 'nodo' | 'conexion';
           </ng-container>
 
         </div>
+
+        </ng-container><!-- fin vista grafo -->
+
+        <!-- ══ VISTA SWIMLANE ═════════════════════════════════════════════ -->
+        <ng-container *ngIf="vistaActual === 'swimlane'">
+          <div class="swimlane-wrapper">
+
+            <div *ngIf="nodos.length === 0" class="swimlane-empty">
+              <mat-icon class="swimlane-empty__icon">view_column</mat-icon>
+              <p>No hay actividades para mostrar en la vista swimlane.</p>
+            </div>
+
+            <div *ngIf="nodos.length > 0" class="swimlane-table-container">
+              <!-- Encabezados de carril -->
+              <div class="swimlane-header-row">
+                <div
+                  *ngFor="let lane of swimlaneLanes"
+                  class="swimlane-header-cell">
+                  <mat-icon *ngIf="lane.rolId === null" class="lane-icon">settings</mat-icon>
+                  <mat-icon *ngIf="lane.rolId !== null" class="lane-icon">person</mat-icon>
+                  <span>{{ lane.rolNombre }}</span>
+                </div>
+              </div>
+
+              <!-- Filas de actividades (ordenadas por orden global) -->
+              <div class="swimlane-body">
+                <div
+                  *ngFor="let row of swimlaneRows"
+                  class="swimlane-body-row">
+                  <div
+                    *ngFor="let lane of swimlaneLanes"
+                    class="swimlane-body-cell">
+                    <ng-container *ngIf="getCellNode(row, lane) as nodo">
+                      <div
+                        class="swimlane-node-card"
+                        [class.swimlane-node-card--selected]="selectedNodo?.id === nodo.id"
+                        (click)="selectNodoSwimlane(nodo)">
+                        <div class="swimlane-node__header">
+                          <mat-icon [style.color]="getTipoColor(nodo.tipo)" class="node-type-icon">
+                            {{ getTipoIcon(nodo.tipo) }}
+                          </mat-icon>
+                          <span class="swimlane-node__name">{{ nodo.nombre }}</span>
+                        </div>
+                        <mat-chip-set>
+                          <mat-chip class="tipo-chip" [style.background]="getTipoColor(nodo.tipo)" style="color:white; font-size:10px;">
+                            {{ nodo.tipo }}
+                          </mat-chip>
+                        </mat-chip-set>
+                        <div *ngIf="nodo.tiempoLimiteHoras" class="swimlane-node__time">
+                          <mat-icon style="font-size:13px;width:13px;height:13px;">timer</mat-icon>
+                          {{ nodo.tiempoLimiteHoras }}h
+                        </div>
+                        <div *ngFor="let t of nodo.transiciones" class="swimlane-node__transition">
+                          <mat-icon style="font-size:13px;width:13px;height:13px;">arrow_forward</mat-icon>
+                          {{ getNombreNodo(t.actividadDestinoId) }}
+                          <span *ngIf="t.etiqueta || t.condicion" class="trans-condition">
+                            ({{ t.etiqueta || t.condicion }})
+                          </span>
+                        </div>
+                      </div>
+                    </ng-container>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </ng-container><!-- fin vista swimlane -->
+
       </div>
     </div>
 
@@ -482,6 +593,97 @@ type PanelMode = 'none' | 'nodo' | 'conexion';
       font-size: 12px;
       text-align: center;
     }
+
+    /* ── Swimlane ───────────────────────────────────────────── */
+    .swimlane-wrapper {
+      flex: 1;
+      overflow: auto;
+      background: #f5f5f5;
+      padding: 16px;
+    }
+    .swimlane-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 64px;
+      color: rgba(0,0,0,0.4);
+    }
+    .swimlane-empty__icon { font-size: 56px; width: 56px; height: 56px; margin-bottom: 12px; }
+    .swimlane-table-container { min-width: max-content; }
+    .swimlane-header-row {
+      display: flex;
+      gap: 2px;
+      margin-bottom: 2px;
+    }
+    .swimlane-header-cell {
+      flex: 0 0 200px;
+      width: 200px;
+      background: #1976d2;
+      color: white;
+      padding: 10px 12px;
+      font-weight: 600;
+      font-size: 13px;
+      border-radius: 4px 4px 0 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .lane-icon { font-size: 18px; width: 18px; height: 18px; }
+    .swimlane-body { display: flex; flex-direction: column; gap: 2px; }
+    .swimlane-body-row {
+      display: flex;
+      gap: 2px;
+    }
+    .swimlane-body-cell {
+      flex: 0 0 200px;
+      width: 200px;
+      min-height: 80px;
+      background: rgba(255,255,255,0.7);
+      border: 1px solid rgba(0,0,0,0.08);
+      border-radius: 0 0 4px 4px;
+      padding: 8px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+    }
+    .swimlane-node-card {
+      width: 100%;
+      background: white;
+      border: 1px solid rgba(0,0,0,0.15);
+      border-radius: 6px;
+      padding: 8px;
+      cursor: pointer;
+      transition: box-shadow 0.15s;
+    }
+    .swimlane-node-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+    .swimlane-node-card--selected { box-shadow: 0 0 0 2px #1976d2; border-color: #1976d2; }
+    .swimlane-node__header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+    }
+    .node-type-icon { font-size: 16px; width: 16px; height: 16px; }
+    .swimlane-node__name { font-weight: 600; font-size: 13px; flex: 1; word-break: break-word; }
+    .tipo-chip { font-size: 10px !important; height: 18px !important; min-height: 18px !important; }
+    .swimlane-node__time {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      font-size: 11px;
+      color: rgba(0,0,0,0.5);
+      margin-top: 4px;
+    }
+    .swimlane-node__transition {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      font-size: 11px;
+      color: rgba(0,0,0,0.6);
+      margin-top: 3px;
+    }
+    .trans-condition { color: rgba(0,0,0,0.4); font-style: italic; }
   `]
 })
 export class FlowEditorComponent implements OnInit, OnDestroy {
@@ -516,6 +718,13 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
 
   nodoForm: FormGroup;
   conexionForm: FormGroup;
+  formularios: FormularioResponse[] = [];
+
+  // ── Vista swimlane ────────────────────────────────────────
+  vistaActual: VistaEditor = 'grafo';
+  swimlaneLanes: SwimlaneLane[] = [];
+  // swimlaneRows: un array con un nodo por posición (uno por fila lógica)
+  swimlaneRows: NodoSVG[] = [];
 
   constructor(
     private route: ActivatedRoute,
@@ -523,6 +732,8 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
     private fb: FormBuilder,
     private politicaService: PoliticaService,
     private actividadService: ActividadService,
+    private formularioService: FormularioService,
+    private roleService: RoleService,
     private snackBar: MatSnackBar,
     private dialog: MatDialog
   ) {
@@ -530,7 +741,8 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
       nombre: ['', Validators.required],
       descripcion: [''],
       responsableRolId: [''],
-      tiempoLimiteHoras: [null]
+      tiempoLimiteHoras: [null],
+      formularioId: [null]
     });
 
     this.conexionForm = this.fb.group({
@@ -554,6 +766,12 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
   private loadData(): void {
     if (!this.politicaId) return;
     this.isLoading = true;
+
+    this.formularioService.getAll({ estado: 'ACTIVO', size: 100 }).subscribe({
+      next: (page) => { this.formularios = page.content; },
+      error: () => {}
+    });
+
     this.politicaService.getById(this.politicaId).subscribe({
       next: (p) => {
         this.politica = p;
@@ -573,6 +791,7 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
       next: (acts) => {
         this.nodos = acts as NodoSVG[];
         this.buildConexiones();
+        this.buildSwimlane();
         this.isLoading = false;
       },
       error: () => { this.isLoading = false; }
@@ -589,6 +808,66 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
         this.conexiones.push(conn);
       }
     }
+  }
+
+  // ── Swimlane ──────────────────────────────────────────────
+
+  private buildSwimlane(): void {
+    // Agrupar nodos por responsableRolId (null → columna "Sistema")
+    const rolIds = new Set<string | null>();
+    for (const n of this.nodos) {
+      if (!n.responsableRolId || ['INICIO', 'FIN', 'DECISION'].includes(n.tipo)) {
+        rolIds.add(null);
+      } else {
+        rolIds.add(n.responsableRolId);
+      }
+    }
+
+    const lanes: SwimlaneLane[] = [];
+
+    // Primero la columna Sistema si existe
+    if (rolIds.has(null)) {
+      lanes.push({
+        rolId: null,
+        rolNombre: 'Sistema',
+        actividades: this.nodos.filter(
+          n => !n.responsableRolId || ['INICIO', 'FIN', 'DECISION'].includes(n.tipo)
+        )
+      });
+    }
+
+    // Luego las columnas de roles reales
+    const rolIdsArr = [...rolIds].filter(id => id !== null) as string[];
+    for (const rolId of rolIdsArr) {
+      const actsDelRol = this.nodos.filter(
+        n => n.responsableRolId === rolId && !['INICIO', 'FIN', 'DECISION'].includes(n.tipo)
+      );
+      // Intentar resolver el nombre del rol
+      this.roleService.getById(rolId).subscribe({
+        next: (role) => {
+          const lane = lanes.find(l => l.rolId === rolId);
+          if (lane) lane.rolNombre = role.nombre ?? rolId;
+        },
+        error: () => { /* usa el ID como nombre, ya inicializado */ }
+      });
+      lanes.push({ rolId, rolNombre: rolId, actividades: actsDelRol });
+    }
+
+    this.swimlaneLanes = lanes;
+
+    // Ordenar nodos para las filas: por posicion.y para aproximar orden visual
+    this.swimlaneRows = [...this.nodos].sort((a, b) => a.posicion.y - b.posicion.y);
+  }
+
+  /** Devuelve el nodo de una fila-carril, o null si no corresponde */
+  getCellNode(rowNodo: NodoSVG, lane: SwimlaneLane): NodoSVG | null {
+    return lane.actividades.includes(rowNodo) ? rowNodo : null;
+  }
+
+  selectNodoSwimlane(nodo: NodoSVG): void {
+    this.selectedNodo = nodo;
+    this.selectedConexion = null;
+    this.panelMode = 'nodo';
   }
 
   private buildConexionUI(desde: NodoSVG, hasta: NodoSVG, t: Transicion): ConexionUI {
@@ -678,7 +957,8 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
       nombre: nodo.nombre,
       descripcion: nodo.descripcion,
       responsableRolId: nodo.responsableRolId ?? '',
-      tiempoLimiteHoras: nodo.tiempoLimiteHoras ?? null
+      tiempoLimiteHoras: nodo.tiempoLimiteHoras ?? null,
+      formularioId: nodo.formularioId ?? null
     });
   }
 
@@ -814,7 +1094,8 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
       nombre: val.nombre,
       descripcion: val.descripcion,
       responsableRolId: val.responsableRolId || null,
-      tiempoLimiteHoras: val.tiempoLimiteHoras || null
+      tiempoLimiteHoras: val.tiempoLimiteHoras || null,
+      formularioId: val.formularioId || null
     };
 
     this.actividadService.update(this.selectedNodo.id, data).subscribe({
@@ -904,5 +1185,30 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
 
   getNombreNodo(id: string): string {
     return this.nodos.find(n => n.id === id)?.nombre ?? id;
+  }
+
+  getFormularioNombre(formularioId: string | null): string {
+    if (!formularioId) return '—';
+    return this.formularios.find(f => f.id === formularioId)?.nombre ?? formularioId;
+  }
+
+  getTipoIcon(tipo: string): string {
+    const m: Record<string, string> = {
+      INICIO: 'play_circle',
+      TAREA: 'task_alt',
+      DECISION: 'device_hub',
+      FIN: 'stop_circle'
+    };
+    return m[tipo] ?? 'circle';
+  }
+
+  getTipoColor(tipo: string): string {
+    const m: Record<string, string> = {
+      INICIO: '#4caf50',
+      TAREA: '#1976d2',
+      DECISION: '#f9a825',
+      FIN: '#f44336'
+    };
+    return m[tipo] ?? '#9e9e9e';
   }
 }

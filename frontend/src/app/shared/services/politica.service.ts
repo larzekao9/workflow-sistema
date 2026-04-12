@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 
 import { environment } from '../../../environments/environment';
 import {
@@ -20,7 +21,10 @@ export class PoliticaService {
     let params = new HttpParams();
     if (filters?.estado) params = params.set('estado', filters.estado);
     if (filters?.nombre) params = params.set('nombre', filters.nombre);
-    return this.http.get<Politica[]>(this.url, { params });
+    // Backend devuelve Page<PoliticaResponse> — extraemos el array content
+    return this.http.get<any>(this.url, { params }).pipe(
+      map(res => res?.content ?? res)
+    );
   }
 
   getById(id: string): Observable<Politica> {

@@ -1,7 +1,7 @@
 # Contrato de API — workflow-sistema
 Base URL: `http://localhost:8080`
 Auth: Bearer JWT en header `Authorization` (excepto /auth/*)
-Última actualización: 2026-04-12 | Sprint 2 completado
+Última actualización: 2026-04-12 | Sprint 2.2 completado
 
 ---
 
@@ -147,6 +147,77 @@ ActividadResponse:
   "transiciones": [{ "actividadDestinoId", "condicion", "etiqueta" }],
   "tiempoLimiteHoras", "creadoEn", "actualizadoEn"
 }
+```
+
+---
+
+## Forms `[requiere JWT]`
+
+### GET /forms → 200 `Page<FormularioResponse>`
+Query params: `nombre?`, `estado?` (ACTIVO|INACTIVO), `page?` (default 0), `size?` (default 20)
+
+### GET /forms/{id} → 200 `FormularioResponse`
+
+### POST /forms → 201 `FormularioResponse`
+Request:
+```json
+{
+  "nombre": "str (3-100)",
+  "descripcion": "str?",
+  "secciones": [{
+    "titulo": "str",
+    "orden": 1,
+    "campos": [{
+      "nombre": "snake_case",
+      "etiqueta": "str",
+      "tipo": "TEXT|NUMBER|DATE|BOOLEAN|SELECT|MULTISELECT|TEXTAREA|FILE|EMAIL",
+      "obligatorio": true,
+      "orden": 1,
+      "placeholder": "str?",
+      "valorDefecto": "str?",
+      "opciones": ["str"],
+      "validaciones": { "min": 0, "max": 0, "pattern": "str?", "mensajeError": "str?" }
+    }]
+  }]
+}
+```
+Error 400 si nombre duplicado. Error 400 si SELECT/MULTISELECT sin opciones.
+
+### PUT /forms/{id} → 200 `FormularioResponse`
+Request: mismos campos, todos opcionales. Error 400 si formulario INACTIVO.
+
+### DELETE /forms/{id} → 204
+Soft delete (→ INACTIVO). Error 400 si formulario referenciado en alguna actividad.
+
+FormularioResponse:
+```json
+{
+  "id", "nombre", "descripcion", "estado",
+  "secciones": [{ "id", "titulo", "orden", "campos": [{ "id", "nombre", "etiqueta", "tipo", "obligatorio", "orden", "placeholder", "valorDefecto", "opciones", "validaciones" }] }],
+  "creadoPorId", "creadoEn", "actualizadoEn"
+}
+```
+
+---
+
+## Policy Relations `[requiere JWT]`
+
+### GET /policies/{policyId}/relations → 200 `PoliticaRelacionResponse[]`
+Retorna relaciones donde la política es origen O destino.
+
+### POST /policies/{policyId}/relations → 201 `PoliticaRelacionResponse`
+Request:
+```json
+{ "politicaDestinoId": "str", "tipoRelacion": "DEPENDENCIA|PRECEDENCIA|COMPLEMENTO|EXCLUSION|OVERRIDE|ESCALAMIENTO", "prioridad": 1, "descripcion": "str?" }
+```
+Error 400 si: origen == destino, par+tipo ya existe, tipo ESCALAMIENTO sin `tiempoLimiteDias` en política origen, políticas ARCHIVADAS.
+
+### DELETE /policies/{policyId}/relations/{relacionId} → 204
+Soft delete (`activo = false`). Nunca eliminación física.
+
+PoliticaRelacionResponse:
+```json
+{ "id", "politicaOrigenId", "politicaOrigenNombre", "politicaDestinoId", "politicaDestinoNombre", "tipoRelacion", "prioridad", "descripcion", "activo", "creadoPorId", "creadoEn" }
 ```
 
 ---

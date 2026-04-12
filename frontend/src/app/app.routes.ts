@@ -51,6 +51,26 @@ export const routes: Routes = [
     loadComponent: () => import('./policies/flow-editor/flow-editor.component').then(m => m.FlowEditorComponent)
   },
   {
+    path: 'forms',
+    canActivate: [authGuard],
+    loadComponent: () => import('./forms/forms-list/forms-list.component').then(m => m.FormsListComponent)
+  },
+  {
+    path: 'forms/new',
+    canActivate: [authGuard],
+    loadComponent: () => import('./forms/form-builder/form-builder.component').then(m => m.FormBuilderComponent)
+  },
+  {
+    path: 'forms/:id/edit',
+    canActivate: [authGuard],
+    loadComponent: () => import('./forms/form-builder/form-builder.component').then(m => m.FormBuilderComponent)
+  },
+  {
+    path: 'forms/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./forms/form-detail/form-detail.component').then(m => m.FormDetailComponent)
+  },
+  {
     path: 'tramites',
     canActivate: [authGuard],
     loadComponent: () => import('./tramites/tramites.component').then(m => m.TramitesComponent)
