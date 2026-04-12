@@ -2,7 +2,7 @@
 Última actualización: 2026-04-12
 
 ## Sprint actual
-Sprint 3 | Inicio: pendiente
+Sprint 3 | Inicio: 2026-04-12
 Objetivo: Motor de Trámites (instanciación, ejecución del flujo, trazabilidad histórica)
 
 ## Features por estado
@@ -18,12 +18,6 @@ Objetivo: Motor de Trámites (instanciación, ejecución del flujo, trazabilidad
 | IA — policy/generate | ⏳ pendiente | Sprint 4 |
 | IA — flow/analyze | ⏳ pendiente | Sprint 4 |
 | app móvil | ⏳ pendiente | Sprint 6 |
-
-## Sprint 2 — entregables
-- Colecciones `politicas` y `actividades` en MongoDB con índices y reglas de versionado
-- Backend: módulos `policies` y `activities` con CRUD, publicación, versionado, validación de grafo
-- Frontend: lista de políticas, formulario, detalle, editor visual de flujo (SVG nativo con drag & drop)
-- Rutas: `/policies`, `/policies/new`, `/policies/:id`, `/policies/:id/edit`, `/policies/:id/flow`
 
 ## Próximo paso
 Sprint 3: diseñar esquema de `tramites` e `historial_tramites` con db-modeler, luego implementar el motor de instanciación y ejecución.

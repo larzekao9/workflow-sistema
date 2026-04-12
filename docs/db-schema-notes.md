@@ -271,11 +271,11 @@ db.actividades.createIndex({ "formulario_id": 1 })
 6. Al modificar una actividad dentro de una política `ACTIVA` está prohibido; el backend rechaza cualquier escritura en actividades cuya `politica_id` apunte a una política con `estado = ACTIVA`.
 7. Eliminar una actividad requiere verificar que ninguna otra actividad tenga `transiciones[].actividad_destino_id` apuntando a ella (integridad referencial manual, dado que MongoDB no la impone).
 
-## Colección: `tramites` _(Sprint 2 — pendiente)_
+## Colección: `tramites` _(Sprint 3 — pendiente)_
 Referencia a `politicas` y `usuarios` por ID.
 Estado actual y actividad actual embebidos (acceso frecuente, cambian con el flujo).
 
-## Colección: `historial_tramites` _(Sprint 2 — pendiente)_
+## Colección: `historial_tramites` _(Sprint 3 — pendiente)_
 Append-only. Nunca UPDATE. Cada avance/rechazo/cambio genera un documento nuevo.
 Campos mínimos: `tramite_id`, `accion`, `actor_id`, `timestamp`, `datos_anteriores`, `datos_nuevos`
 
