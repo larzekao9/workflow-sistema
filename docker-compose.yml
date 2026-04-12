@@ -1,0 +1,64 @@
+version: '3.9'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: workflow-mongo
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: workflow_dev_pass
+      MONGO_INITDB_DATABASE: workflow_db
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - workflow-net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: workflow-backend
+    ports:
+      - "8080:8080"
+    environment:
+      MONGODB_URI: mongodb://admin:workflow_dev_pass@mongodb:27017/workflow_db?authSource=admin
+      JWT_SECRET: workflow-dev-secret-key-change-in-production
+      JWT_EXPIRATION: 86400000
+      AI_SERVICE_URL: http://ai-service:8001
+    depends_on:
+      - mongodb
+    networks:
+      - workflow-net
+
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: workflow-ai
+    ports:
+      - "8001:8001"
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    networks:
+      - workflow-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: workflow-frontend
+    ports:
+      - "4200:80"
+    depends_on:
+      - backend
+    networks:
+      - workflow-net
+
+volumes:
+  mongo_data:
+
+networks:
+  workflow-net:
+    driver: bridge

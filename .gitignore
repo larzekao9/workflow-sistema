@@ -2,3 +2,21 @@
 .claude/
 CLAUDE.md
 CLAUDE. local.md 
+
+# Node y Frontend
+node_modules/
+dist/
+.angular/
+
+# Java y Backend
+target/
+*.jar
+*.class
+
+# Python e IA
+__pycache__/
+*.pyc
+.env
+
+# SO
+.DS_Store
