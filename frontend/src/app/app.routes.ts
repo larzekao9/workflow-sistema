@@ -28,7 +28,27 @@ export const routes: Routes = [
   {
     path: 'policies',
     canActivate: [authGuard],
-    loadComponent: () => import('./policies/policies.component').then(m => m.PoliciesComponent)
+    loadComponent: () => import('./policies/policies-list/policies-list.component').then(m => m.PoliciesListComponent)
+  },
+  {
+    path: 'policies/new',
+    canActivate: [authGuard],
+    loadComponent: () => import('./policies/policy-form/policy-form.component').then(m => m.PolicyFormComponent)
+  },
+  {
+    path: 'policies/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./policies/policy-detail/policy-detail.component').then(m => m.PolicyDetailComponent)
+  },
+  {
+    path: 'policies/:id/edit',
+    canActivate: [authGuard],
+    loadComponent: () => import('./policies/policy-form/policy-form.component').then(m => m.PolicyFormComponent)
+  },
+  {
+    path: 'policies/:id/flow',
+    canActivate: [authGuard],
+    loadComponent: () => import('./policies/flow-editor/flow-editor.component').then(m => m.FlowEditorComponent)
   },
   {
     path: 'tramites',
