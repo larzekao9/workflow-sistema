@@ -55,6 +55,10 @@ import { AuthService } from './shared/services/auth.service';
               <mat-icon matListItemIcon>account_tree</mat-icon>
               <span matListItemTitle>Politicas</span>
             </a>
+            <a mat-list-item routerLink="/forms" routerLinkActive="active-link">
+              <mat-icon matListItemIcon>dynamic_form</mat-icon>
+              <span matListItemTitle>Formularios</span>
+            </a>
             <a mat-list-item routerLink="/tramites" routerLinkActive="active-link">
               <mat-icon matListItemIcon>assignment</mat-icon>
               <span matListItemTitle>Tramites</span>

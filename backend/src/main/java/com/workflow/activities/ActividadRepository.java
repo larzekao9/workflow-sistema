@@ -14,5 +14,8 @@ public interface ActividadRepository extends MongoRepository<Actividad, String> 
 
     long countByPoliticaId(String politicaId);
 
+    // Usado por FormularioService para verificar referencias antes de desactivar un formulario
+    long countByFormularioId(String formularioId);
+
     void deleteByPoliticaId(String politicaId);
 }

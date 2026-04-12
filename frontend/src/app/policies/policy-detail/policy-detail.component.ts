@@ -1,6 +1,7 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, Inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
+import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -10,15 +11,128 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatListModule } from '@angular/material/list';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatDialog, MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatExpansionModule } from '@angular/material/expansion';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
+import { MatStepperModule } from '@angular/material/stepper';
 
 import { PoliticaService } from '../../shared/services/politica.service';
 import { ActividadService } from '../../shared/services/actividad.service';
+import { PoliticaRelacionService } from '../../shared/services/politica-relacion.service';
 import { Politica, EstadoPolitica } from '../../shared/models/politica.model';
 import { Actividad } from '../../shared/models/actividad.model';
+import {
+  PoliticaRelacionResponse,
+  CreatePoliticaRelacionRequest,
+  TipoRelacion
+} from '../../shared/models/politica-relacion.model';
 import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/confirm-dialog.component';
+
+// ─── Dialog interno para agregar relación ────────────────────────────────────
+
+interface AgregarRelacionDialogData {
+  politicasActivas: Politica[];
+}
+
+@Component({
+  selector: 'app-agregar-relacion-dialog',
+  standalone: true,
+  imports: [
+    CommonModule,
+    ReactiveFormsModule,
+    MatButtonModule,
+    MatDialogModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatSelectModule
+  ],
+  template: `
+    <h2 mat-dialog-title>Agregar relación</h2>
+    <mat-dialog-content>
+      <form [formGroup]="form" class="dialog-form">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Política destino</mat-label>
+          <mat-select formControlName="politicaDestinoId">
+            <mat-option *ngFor="let p of data.politicasActivas" [value]="p.id">
+              {{ p.nombre }} (v{{ p.version }})
+            </mat-option>
+          </mat-select>
+          <mat-error *ngIf="form.get('politicaDestinoId')?.hasError('required')">Obligatorio</mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Tipo de relación</mat-label>
+          <mat-select formControlName="tipoRelacion">
+            <mat-option value="DEPENDENCIA">DEPENDENCIA</mat-option>
+            <mat-option value="PRECEDENCIA">PRECEDENCIA</mat-option>
+            <mat-option value="COMPLEMENTO">COMPLEMENTO</mat-option>
+            <mat-option value="EXCLUSION">EXCLUSION</mat-option>
+            <mat-option value="OVERRIDE">OVERRIDE</mat-option>
+            <mat-option value="ESCALAMIENTO">ESCALAMIENTO</mat-option>
+          </mat-select>
+          <mat-error *ngIf="form.get('tipoRelacion')?.hasError('required')">Obligatorio</mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Prioridad</mat-label>
+          <input matInput type="number" formControlName="prioridad" min="1" />
+          <mat-error *ngIf="form.get('prioridad')?.hasError('required')">Obligatorio</mat-error>
+          <mat-error *ngIf="form.get('prioridad')?.hasError('min')">Debe ser mayor a 0</mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Descripción (opcional)</mat-label>
+          <textarea matInput formControlName="descripcion" rows="2"></textarea>
+        </mat-form-field>
+      </form>
+    </mat-dialog-content>
+    <mat-dialog-actions align="end">
+      <button mat-button (click)="dialogRef.close(null)">Cancelar</button>
+      <button
+        mat-raised-button
+        color="primary"
+        [disabled]="form.invalid"
+        (click)="confirm()">
+        Agregar
+      </button>
+    </mat-dialog-actions>
+  `,
+  styles: [`.dialog-form { display: flex; flex-direction: column; gap: 4px; min-width: 360px; } .full-width { width: 100%; }`]
+})
+export class AgregarRelacionDialogComponent {
+  form: FormGroup;
+
+  constructor(
+    public dialogRef: MatDialogRef<AgregarRelacionDialogComponent>,
+    @Inject(MAT_DIALOG_DATA) public data: AgregarRelacionDialogData,
+    fb: FormBuilder
+  ) {
+    this.form = fb.group({
+      politicaDestinoId: ['', Validators.required],
+      tipoRelacion: ['DEPENDENCIA', Validators.required],
+      prioridad: [1, [Validators.required, Validators.min(1)]]
+    ,
+      descripcion: ['']
+    });
+  }
+
+  confirm(): void {
+    if (this.form.invalid) return;
+    const val = this.form.value;
+    const request: CreatePoliticaRelacionRequest = {
+      politicaDestinoId: val.politicaDestinoId,
+      tipoRelacion: val.tipoRelacion as TipoRelacion,
+      prioridad: val.prioridad,
+      descripcion: val.descripcion || undefined
+    };
+    this.dialogRef.close(request);
+  }
+}
+
+// ─── Componente principal ─────────────────────────────────────────────────────
 
 @Component({
   selector: 'app-policy-detail',
@@ -26,6 +140,7 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/c
   imports: [
     CommonModule,
     RouterModule,
+    ReactiveFormsModule,
     MatCardModule,
     MatButtonModule,
     MatIconModule,
@@ -36,7 +151,11 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/c
     MatSnackBarModule,
     MatDialogModule,
     MatTooltipModule,
-    MatExpansionModule
+    MatExpansionModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatSelectModule,
+    MatStepperModule
   ],
   template: `
     <div class="page-header">
@@ -56,8 +175,8 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/c
       <!-- Info principal -->
       <mat-card class="main-card">
         <mat-card-header>
-          <mat-icon mat-card-avatar [style.color]="politica.metadatos.color ?? '#1976d2'">
-            {{ politica.metadatos.icono ?? 'description' }}
+          <mat-icon mat-card-avatar [style.color]="politica.metadatos.color || '#1976d2'">
+            {{ politica.metadatos.icono || 'description' }}
           </mat-icon>
           <mat-card-title>{{ politica.nombre }}</mat-card-title>
           <mat-card-subtitle>
@@ -166,12 +285,115 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/c
         </mat-card-actions>
       </mat-card>
 
-      <!-- Versiones relacionadas -->
+      <!-- ── MEJORA 1: Panel de Relaciones ──────────────────────────────── -->
+      <mat-card
+        class="relations-card"
+        *ngIf="politica.estado === 'BORRADOR' || politica.estado === 'ACTIVA'">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>device_hub</mat-icon>
+            Relaciones con otras políticas
+          </mat-card-title>
+          <mat-card-subtitle>{{ relaciones.length }} relación(es) configurada(s)</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <div *ngIf="loadingRelaciones" class="loading-container">
+            <mat-spinner diameter="32"></mat-spinner>
+          </div>
+
+          <div *ngIf="!loadingRelaciones && relaciones.length === 0" class="empty-relations">
+            <mat-icon class="empty-icon">device_hub</mat-icon>
+            <p>Sin relaciones configuradas.</p>
+          </div>
+
+          <div *ngIf="!loadingRelaciones && relaciones.length > 0" class="relations-list">
+            <div *ngFor="let rel of relaciones" class="relation-chip-row">
+              <span
+                class="tipo-badge"
+                [style.background]="getTipoRelacionColor(rel.tipoRelacion)"
+                [style.color]="'white'">
+                {{ rel.tipoRelacion }}
+              </span>
+              <mat-icon class="arrow-icon">arrow_forward</mat-icon>
+              <span class="dest-nombre">{{ rel.politicaDestinoNombre }}</span>
+              <span class="prioridad-label">(prioridad: {{ rel.prioridad }})</span>
+              <span *ngIf="rel.descripcion" class="rel-desc">— {{ rel.descripcion }}</span>
+              <button
+                mat-icon-button
+                color="warn"
+                class="delete-rel-btn"
+                matTooltip="Eliminar relación"
+                (click)="deleteRelacion(rel)">
+                <mat-icon>delete_outline</mat-icon>
+              </button>
+            </div>
+          </div>
+        </mat-card-content>
+        <mat-card-actions>
+          <button mat-raised-button color="accent" (click)="openAgregarRelacion()">
+            <mat-icon>add_link</mat-icon>
+            Agregar relación
+          </button>
+        </mat-card-actions>
+      </mat-card>
+
+      <!-- ── MEJORA 3: Árbol de versiones ───────────────────────────────── -->
+      <mat-card
+        class="versions-card"
+        *ngIf="todasLasVersiones.length > 0">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>history</mat-icon>
+            Historial de versiones
+          </mat-card-title>
+          <mat-card-subtitle>{{ todasLasVersiones.length }} versión(es) en el árbol</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <div *ngIf="loadingVersiones" class="loading-container">
+            <mat-spinner diameter="32"></mat-spinner>
+          </div>
+
+          <div *ngIf="!loadingVersiones" class="version-stepper">
+            <ng-container *ngFor="let v of todasLasVersiones; let last = last">
+              <div
+                class="version-step"
+                [class.version-step--current]="v.id === politica.id">
+                <div class="version-step__circle">
+                  <mat-icon *ngIf="v.id === politica.id">star</mat-icon>
+                  <span *ngIf="v.id !== politica.id">v{{ v.version }}</span>
+                </div>
+                <div class="version-step__info">
+                  <span class="version-step__label">
+                    v{{ v.version }}
+                    <span *ngIf="v.id === politica.id" class="actual-label">(actual)</span>
+                  </span>
+                  <mat-chip [ngClass]="getEstadoClass(v.estado)" selected class="version-chip">
+                    {{ v.estado }}
+                  </mat-chip>
+                  <span class="version-step__date">{{ v.creadoEn | date:'dd/MM/yyyy' }}</span>
+                </div>
+                <button
+                  *ngIf="v.id !== politica.id"
+                  mat-icon-button
+                  [routerLink]="['/policies', v.id]"
+                  matTooltip="Ver versión">
+                  <mat-icon>visibility</mat-icon>
+                </button>
+              </div>
+              <div *ngIf="!last" class="version-connector">
+                <mat-icon>arrow_downward</mat-icon>
+              </div>
+            </ng-container>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Versiones relacionadas (panel colapsable legacy, se mantiene para no romper) -->
       <mat-expansion-panel class="versions-panel" *ngIf="versiones.length > 0">
         <mat-expansion-panel-header>
           <mat-panel-title>
             <mat-icon>history</mat-icon>&nbsp;
-            Historial de versiones ({{ versiones.length }})
+            Otras versiones relacionadas ({{ versiones.length }})
           </mat-panel-title>
         </mat-expansion-panel-header>
         <mat-list>
@@ -202,6 +424,8 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/c
     .loading-container { display: flex; justify-content: center; padding: 48px; }
     .main-card { margin-bottom: 20px; }
     .activities-card { margin-bottom: 20px; }
+    .relations-card { margin-bottom: 20px; }
+    .versions-card { margin-bottom: 20px; }
     .versions-panel { margin-bottom: 20px; }
     .description { color: rgba(0,0,0,0.7); margin-bottom: 16px; }
     .meta-row {
@@ -212,7 +436,7 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/c
     }
     .meta-label { font-weight: 500; color: rgba(0,0,0,0.6); min-width: 90px; }
     .actions-row { padding: 8px 16px 16px; display: flex; gap: 8px; flex-wrap: wrap; }
-    .empty-activities {
+    .empty-activities, .empty-relations {
       text-align: center;
       padding: 32px;
       color: rgba(0,0,0,0.4);
@@ -232,12 +456,103 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/c
       display: flex;
       align-items: center;
     }
+
+    /* Relaciones */
+    .relations-list { display: flex; flex-direction: column; gap: 8px; padding: 8px 0; }
+    .relation-chip-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      background: rgba(0,0,0,0.03);
+      flex-wrap: wrap;
+    }
+    .tipo-badge {
+      padding: 2px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .arrow-icon { font-size: 18px; width: 18px; height: 18px; color: rgba(0,0,0,0.4); }
+    .dest-nombre { font-weight: 500; font-size: 14px; }
+    .prioridad-label { font-size: 12px; color: rgba(0,0,0,0.5); }
+    .rel-desc { font-size: 12px; color: rgba(0,0,0,0.5); font-style: italic; flex: 1; }
+    .delete-rel-btn { margin-left: auto; }
+
+    /* Árbol de versiones */
+    .version-stepper {
+      display: flex;
+      flex-direction: column;
+      padding: 8px 0;
+    }
+    .version-step {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(0,0,0,0.12);
+      background: white;
+    }
+    .version-step--current {
+      border-color: #1976d2;
+      background: #e3f2fd;
+    }
+    .version-step__circle {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: #e0e0e0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .version-step--current .version-step__circle {
+      background: #1976d2;
+      color: white;
+    }
+    .version-step--current .version-step__circle mat-icon {
+      font-size: 20px;
+      width: 20px;
+      height: 20px;
+      color: white;
+    }
+    .version-step__info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+      flex-wrap: wrap;
+    }
+    .version-step__label { font-weight: 600; font-size: 14px; }
+    .actual-label { font-size: 11px; color: #1976d2; font-weight: 400; }
+    .version-step__date { font-size: 12px; color: rgba(0,0,0,0.5); }
+    .version-connector {
+      display: flex;
+      justify-content: center;
+      color: rgba(0,0,0,0.3);
+      padding: 2px 0;
+    }
   `]
 })
 export class PolicyDetailComponent implements OnInit {
   politica: Politica | null = null;
   actividades: Actividad[] = [];
   versiones: Politica[] = [];
+
+  // Mejora 1: relaciones
+  relaciones: PoliticaRelacionResponse[] = [];
+  loadingRelaciones = false;
+
+  // Mejora 3: árbol de versiones completo
+  todasLasVersiones: Politica[] = [];
+  loadingVersiones = false;
+
   isLoading = false;
   loadingActividades = false;
   isActioning = false;
@@ -247,6 +562,7 @@ export class PolicyDetailComponent implements OnInit {
     private router: Router,
     private politicaService: PoliticaService,
     private actividadService: ActividadService,
+    private relacionService: PoliticaRelacionService,
     private snackBar: MatSnackBar,
     private dialog: MatDialog
   ) {}
@@ -268,6 +584,10 @@ export class PolicyDetailComponent implements OnInit {
         this.isLoading = false;
         this.loadActividades(id);
         this.loadVersiones(p);
+        this.loadVersionTree(p);
+        if (p.estado === 'BORRADOR' || p.estado === 'ACTIVA') {
+          this.loadRelaciones(id);
+        }
       },
       error: (err) => {
         this.isLoading = false;
@@ -297,6 +617,135 @@ export class PolicyDetailComponent implements OnInit {
       error: () => { this.versiones = []; }
     });
   }
+
+  // ── Mejora 3: árbol completo de versiones ──────────────────────────────────
+
+  private loadVersionTree(p: Politica): void {
+    // Solo mostramos si hay árbol (versionPadreId existe o versión > 1)
+    if (!p.versionPadreId && p.version <= 1) {
+      this.todasLasVersiones = [];
+      return;
+    }
+    this.loadingVersiones = true;
+    const parentId = p.versionPadreId ?? p.id;
+    this.politicaService.getVersiones(parentId).subscribe({
+      next: (vs) => {
+        // Incluir la política raíz si no está en el listado (cuando getVersiones filtra por versionPadreId)
+        const incluyeRaiz = vs.some(v => v.id === parentId);
+        if (!incluyeRaiz) {
+          // Cargar la raíz por separado
+          this.politicaService.getById(parentId).subscribe({
+            next: (raiz) => {
+              const todas = [raiz, ...vs].sort((a, b) => a.version - b.version);
+              // Asegurarse de que la política actual está en el árbol
+              const estaActual = todas.some(v => v.id === p.id);
+              this.todasLasVersiones = estaActual
+                ? todas
+                : [...todas.filter(v => v.id !== p.id), p].sort((a, b) => a.version - b.version);
+              this.loadingVersiones = false;
+            },
+            error: () => {
+              this.todasLasVersiones = vs.sort((a, b) => a.version - b.version);
+              this.loadingVersiones = false;
+            }
+          });
+        } else {
+          const todas = vs.sort((a, b) => a.version - b.version);
+          const estaActual = todas.some(v => v.id === p.id);
+          this.todasLasVersiones = estaActual
+            ? todas
+            : [...todas, p].sort((a, b) => a.version - b.version);
+          this.loadingVersiones = false;
+        }
+      },
+      error: () => {
+        this.todasLasVersiones = [];
+        this.loadingVersiones = false;
+      }
+    });
+  }
+
+  // ── Mejora 1: Relaciones ───────────────────────────────────────────────────
+
+  private loadRelaciones(politicaId: string): void {
+    this.loadingRelaciones = true;
+    this.relacionService.getByPolitica(politicaId).subscribe({
+      next: (rels) => {
+        this.relaciones = rels;
+        this.loadingRelaciones = false;
+      },
+      error: () => {
+        this.loadingRelaciones = false;
+        this.snackBar.open('No se pudieron cargar las relaciones', 'Cerrar', { duration: 3000 });
+      }
+    });
+  }
+
+  openAgregarRelacion(): void {
+    if (!this.politica) return;
+    // Cargar políticas activas para el select
+    this.politicaService.getAll({ estado: 'ACTIVA' }).subscribe({
+      next: (politicas) => {
+        const disponibles = politicas.filter(p => p.id !== this.politica!.id);
+        const ref = this.dialog.open(AgregarRelacionDialogComponent, {
+          data: { politicasActivas: disponibles } as AgregarRelacionDialogData,
+          width: '460px'
+        });
+        ref.afterClosed().subscribe((request: CreatePoliticaRelacionRequest | null) => {
+          if (!request || !this.politica) return;
+          this.relacionService.create(this.politica.id, request).subscribe({
+            next: (nueva) => {
+              this.relaciones = [...this.relaciones, nueva];
+              this.snackBar.open('Relación agregada', 'Cerrar', { duration: 3000 });
+            },
+            error: (err) => {
+              this.snackBar.open(err?.error?.message || 'Error al agregar relación', 'Cerrar', { duration: 4000 });
+            }
+          });
+        });
+      },
+      error: () => {
+        this.snackBar.open('No se pudieron cargar las políticas activas', 'Cerrar', { duration: 3000 });
+      }
+    });
+  }
+
+  deleteRelacion(rel: PoliticaRelacionResponse): void {
+    if (!this.politica) return;
+    const ref = this.dialog.open(ConfirmDialogComponent, {
+      data: {
+        title: 'Eliminar relación',
+        message: `¿Eliminás la relación "${rel.tipoRelacion}" con "${rel.politicaDestinoNombre}"?`
+      },
+      width: '420px'
+    });
+    ref.afterClosed().subscribe(confirmed => {
+      if (!confirmed || !this.politica) return;
+      this.relacionService.delete(this.politica.id, rel.id).subscribe({
+        next: () => {
+          this.relaciones = this.relaciones.filter(r => r.id !== rel.id);
+          this.snackBar.open('Relación eliminada', 'Cerrar', { duration: 3000 });
+        },
+        error: (err) => {
+          this.snackBar.open(err?.error?.message || 'Error al eliminar relación', 'Cerrar', { duration: 4000 });
+        }
+      });
+    });
+  }
+
+  getTipoRelacionColor(tipo: TipoRelacion): string {
+    const map: Record<TipoRelacion, string> = {
+      DEPENDENCIA: '#1976d2',
+      PRECEDENCIA: '#e65100',
+      COMPLEMENTO: '#388e3c',
+      EXCLUSION: '#d32f2f',
+      OVERRIDE: '#7b1fa2',
+      ESCALAMIENTO: '#f9a825'
+    };
+    return map[tipo] ?? '#757575';
+  }
+
+  // ── Acciones existentes ────────────────────────────────────────────────────
 
   getEstadoClass(estado: EstadoPolitica): string {
     const map: Record<EstadoPolitica, string> = {
