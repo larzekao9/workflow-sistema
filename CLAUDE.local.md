@@ -2,7 +2,7 @@
 Última actualización: 2026-04-12
 
 ## Sprint actual
-Sprint 3 | Inicio: pendiente
+Sprint 3 | Inicio: 2026-04-12
 Objetivo: Motor de Trámites — instanciación, ejecución del flujo, trazabilidad histórica
 
 ## Roadmap completo
@@ -13,7 +13,7 @@ Objetivo: Motor de Trámites — instanciación, ejecución del flujo, trazabili
 | Sprint 2 | Motor de políticas (CRUD + editor visual SVG) | ✓ completo |
 | Sprint 2.1 | Módulo Formularios (schema + backend + frontend + integración editor) | ✓ completo |
 | Sprint 2.2 | Relaciones de políticas + vista swimlane + árbol de versiones | ✓ completo |
-| Sprint 2.3 | UX: creación de política → editor directo + acciones por fila | ⏳ pendiente |
+| Sprint 2.3 | UX: creación de política → editor directo + acciones por fila | ✓ completo |
 | Sprint 3 | Motor de Trámites (instanciación, ejecución del flujo, trazabilidad) | ⏳ pendiente |
 | Sprint 4 | IA — policy/generate + flow/analyze | ⏳ pendiente |
 | Sprint 6 | App móvil Flutter | ⏳ congelado |
@@ -31,6 +31,9 @@ Objetivo: Motor de Trámites — instanciación, ejecución del flujo, trazabili
 | relaciones entre políticas | ✓ | Sprint 2.2 — backend + panel en policy-detail |
 | vista swimlane en editor | ✓ | Sprint 2.2 — toggle grafo/swimlane en flow editor |
 | árbol de versiones UI | ✓ | Sprint 2.2 — stepper en policy-detail |
+| dialog crear política | ✓ | Sprint 2.3 — nombre + desc → POST → editor directo |
+| botón "Abrir Editor" | ✓ | Sprint 2.3 — CTA principal en filas BORRADOR |
+| nombre editable inline | ✓ | Sprint 2.3 — en barra superior del flow-editor |
 | motor de trámites | ⏳ pendiente | Sprint 3 |
 | historial/auditoría | ⏳ pendiente | Sprint 3 |
 | IA — policy/generate | ⏳ pendiente | Sprint 4 |
@@ -38,11 +41,12 @@ Objetivo: Motor de Trámites — instanciación, ejecución del flujo, trazabili
 | app móvil | ⏳ pendiente | Sprint 6 |
 
 ## Próximo paso inmediato
-Sprint 2.3 (frontend-angular, 1 sesión):
-- `policies-list`: "Nueva Política" → MatDialog (nombre + desc) → POST → navega directo a `/policies/{id}/flow-editor`
-- `policies-list`: botón "Abrir Editor" por fila (CTA principal en BORRADOR)
-- `flow-editor`: nombre editable inline en barra superior (solo BORRADOR)
-Luego Sprint 3: schema `tramites` + `historial_tramites` con db-modeler.
+Sprint 3 (backend + db-modeler, 2 sesiones):
+- `db-modeler`: diseñar colección `tramites` (instancias de ejecución)
+- `db-modeler`: diseñar colección `historial_tramites` (auditoría de eventos)
+- `backend-spring`: módulo Tramites con CRUD e instanciación desde política
+- `backend-spring`: motor de ejecución (evaluar políticas, asignar responsables)
+- Frontend: vista de tramites (lista + detalle + seguimiento visual)
 
 ## Bloqueos
 Ninguno.

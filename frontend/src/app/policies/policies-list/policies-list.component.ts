@@ -22,6 +22,7 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { PoliticaService } from '../../shared/services/politica.service';
 import { Politica, EstadoPolitica } from '../../shared/models/politica.model';
 import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/confirm-dialog.component';
+import { CreatePoliticaDialogComponent } from '../create-politica-dialog/create-politica-dialog.component';
 
 @Component({
   selector: 'app-policies-list',
@@ -48,7 +49,7 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/c
   template: `
     <div class="page-header">
       <h1>Políticas de Negocio</h1>
-      <button mat-raised-button color="primary" routerLink="/policies/new">
+      <button mat-raised-button color="primary" (click)="openCreateDialog()">
         <mat-icon>add</mat-icon>
         Nueva Política
       </button>
@@ -104,6 +105,21 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/c
             <ng-container matColumnDef="departamento">
               <th mat-header-cell *matHeaderCellDef mat-sort-header>Departamento</th>
               <td mat-cell *matCellDef="let p">{{ p.departamento }}</td>
+            </ng-container>
+
+            <ng-container matColumnDef="editor">
+              <th mat-header-cell *matHeaderCellDef>Editor</th>
+              <td mat-cell *matCellDef="let p">
+                <button
+                  mat-raised-button
+                  color="primary"
+                  *ngIf="p.estado === 'BORRADOR'"
+                  [routerLink]="['/policies', p.id, 'flow-editor']"
+                  matTooltip="Abrir editor de flujo">
+                  <mat-icon>edit_note</mat-icon>
+                  Editar
+                </button>
+              </td>
             </ng-container>
 
             <ng-container matColumnDef="acciones">
@@ -188,7 +204,7 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/c
   `]
 })
 export class PoliciesListComponent implements OnInit, AfterViewInit {
-  displayedColumns = ['nombre', 'estado', 'version', 'departamento', 'acciones'];
+  displayedColumns = ['nombre', 'estado', 'version', 'departamento', 'editor', 'acciones'];
   dataSource = new MatTableDataSource<Politica>();
   isLoading = false;
 
@@ -302,6 +318,21 @@ export class PoliciesListComponent implements OnInit, AfterViewInit {
         this.router.navigate(['/policies', nueva.id, 'edit']);
       },
       error: (err) => this.snackBar.open(err?.error?.message || 'Error al crear nueva versión', 'Cerrar', { duration: 4000 })
+    });
+  }
+
+  openCreateDialog(): void {
+    const ref = this.dialog.open(CreatePoliticaDialogComponent, {
+      width: '480px',
+      disableClose: false
+    });
+
+    ref.afterClosed().subscribe(nuevaPolitica => {
+      if (!nuevaPolitica) return; // Usuario canceló
+
+      this.snackBar.open('Política creada correctamente', 'Cerrar', { duration: 3000 });
+      // Navega al editor de flujo de la nueva política
+      this.router.navigate(['/policies', nuevaPolitica.id, 'flow-editor']);
     });
   }
 }

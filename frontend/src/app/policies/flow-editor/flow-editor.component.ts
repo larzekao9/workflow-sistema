@@ -94,7 +94,28 @@ interface SwimlaneLane {
         <button mat-icon-button [routerLink]="['/policies', politicaId]" matTooltip="Volver al detalle">
           <mat-icon>arrow_back</mat-icon>
         </button>
-        <h2 class="top-title">Editor de Flujo{{ politica ? ': ' + politica.nombre : '' }}</h2>
+
+        <!-- Título editable inline -->
+        <div class="top-title-container">
+          <span *ngIf="!editingName" class="top-title" (click)="startEditingName()">
+            Editor de Flujo{{ politica ? ': ' + politica.nombre : '' }}
+          </span>
+          <div *ngIf="editingName && politica?.estado === 'BORRADOR'" class="title-edit-wrapper">
+            <input
+              type="text"
+              [(ngModel)]="editingNameValue"
+              class="title-edit-input"
+              (keydown.escape)="cancelEditingName()"
+              (keydown.enter)="saveEditingName()"
+              (blur)="saveEditingName()"
+              #titleInput />
+            <mat-spinner
+              *ngIf="isSavingName"
+              diameter="16"
+              style="display:inline-block;margin-left:8px"></mat-spinner>
+          </div>
+        </div>
+
         <div class="top-spacer"></div>
         <span *ngIf="politica?.estado !== 'BORRADOR'" class="readonly-badge">
           <mat-icon>lock</mat-icon> Solo lectura ({{ politica?.estado }})
@@ -502,6 +523,39 @@ interface SwimlaneLane {
       min-height: 56px;
     }
     .top-title { margin: 0; font-size: 18px; font-weight: 500; }
+    .top-title-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .top-title {
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: background 0.15s;
+    }
+    .top-title:hover {
+      background: rgba(0, 0, 0, 0.04);
+    }
+    .title-edit-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .title-edit-input {
+      padding: 6px 10px;
+      border: 2px solid #1976d2;
+      border-radius: 4px;
+      font-size: 16px;
+      font-weight: 500;
+      font-family: inherit;
+      outline: none;
+      transition: border 0.15s;
+    }
+    .title-edit-input:focus {
+      border-color: #1565c0;
+      box-shadow: 0 0 4px rgba(25, 118, 210, 0.4);
+    }
     .top-spacer { flex: 1; }
     .readonly-badge {
       display: flex;
@@ -725,6 +779,11 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
   swimlaneLanes: SwimlaneLane[] = [];
   // swimlaneRows: un array con un nodo por posición (uno por fila lógica)
   swimlaneRows: NodoSVG[] = [];
+
+  // ── Edición inline del nombre ─────────────────────────────
+  editingName = false;
+  editingNameValue = '';
+  isSavingName = false;
 
   constructor(
     private route: ActivatedRoute,
@@ -1210,5 +1269,63 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
       FIN: '#f44336'
     };
     return m[tipo] ?? '#9e9e9e';
+  }
+
+  // ── Edición inline del nombre ─────────────────────────────
+
+  startEditingName(): void {
+    if (!this.politica || this.politica.estado !== 'BORRADOR') return;
+    this.editingName = true;
+    this.editingNameValue = this.politica.nombre;
+    // Focus the input after ngIf renders it
+    setTimeout(() => {
+      const input = document.querySelector('.title-edit-input') as HTMLInputElement;
+      if (input) {
+        input.focus();
+        input.select();
+      }
+    }, 0);
+  }
+
+  cancelEditingName(): void {
+    this.editingName = false;
+    this.editingNameValue = '';
+  }
+
+  saveEditingName(): void {
+    if (!this.politica || !this.editingNameValue.trim()) {
+      this.cancelEditingName();
+      return;
+    }
+
+    // No hay cambios
+    if (this.editingNameValue === this.politica.nombre) {
+      this.cancelEditingName();
+      return;
+    }
+
+    this.isSavingName = true;
+
+    this.politicaService.update(this.politica.id, {
+      nombre: this.editingNameValue.trim()
+    }).subscribe({
+      next: (updated) => {
+        this.politica = updated;
+        this.isSavingName = false;
+        this.editingName = false;
+        this.editingNameValue = '';
+        this.snackBar.open('Nombre actualizado', 'Cerrar', { duration: 2000 });
+      },
+      error: (err) => {
+        this.isSavingName = false;
+        this.snackBar.open(
+          err?.error?.message || 'Error al actualizar el nombre',
+          'Cerrar',
+          { duration: 4000 }
+        );
+        // Revert to previous name
+        this.editingNameValue = this.politica!.nombre;
+      }
+    });
   }
 }
