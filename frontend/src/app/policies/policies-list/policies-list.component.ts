@@ -49,7 +49,7 @@ import { CreatePoliticaDialogComponent } from '../create-politica-dialog/create-
   template: `
     <div class="page-header">
       <h1>Políticas de Negocio</h1>
-      <button mat-raised-button color="primary" (click)="openCreateDialog()">
+      <button mat-raised-button color="primary" routerLink="/policies/new">
         <mat-icon>add</mat-icon>
         Nueva Política
       </button>
@@ -114,7 +114,7 @@ import { CreatePoliticaDialogComponent } from '../create-politica-dialog/create-
                   mat-raised-button
                   color="primary"
                   *ngIf="p.estado === 'BORRADOR'"
-                  [routerLink]="['/policies', p.id, 'flow-editor']"
+                  [routerLink]="['/policies', p.id, 'flow']"
                   matTooltip="Abrir editor de flujo">
                   <mat-icon>edit_note</mat-icon>
                   Editar
@@ -332,7 +332,7 @@ export class PoliciesListComponent implements OnInit, AfterViewInit {
 
       this.snackBar.open('Política creada correctamente', 'Cerrar', { duration: 3000 });
       // Navega al editor de flujo de la nueva política
-      this.router.navigate(['/policies', nuevaPolitica.id, 'flow-editor']);
+      this.router.navigate(['/policies', nuevaPolitica.id, 'flow']);
     });
   }
 }

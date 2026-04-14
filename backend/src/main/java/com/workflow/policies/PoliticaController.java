@@ -33,14 +33,14 @@ public class PoliticaController {
 
     // POST /policies
     @PostMapping
-    @PreAuthorize("hasAuthority('ADMIN')")
+    @PreAuthorize("hasAuthority('GESTIONAR_POLITICAS')")
     public ResponseEntity<PoliticaResponse> create(@Valid @RequestBody CreatePoliticaRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(politicaService.create(request));
     }
 
     // PUT /policies/{id}
     @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('ADMIN')")
+    @PreAuthorize("hasAuthority('GESTIONAR_POLITICAS')")
     public ResponseEntity<PoliticaResponse> update(
             @PathVariable String id,
             @Valid @RequestBody UpdatePoliticaRequest request) {
@@ -49,7 +49,7 @@ public class PoliticaController {
 
     // DELETE /policies/{id} → soft delete (estado INACTIVA)
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAuthority('ADMIN')")
+    @PreAuthorize("hasAuthority('GESTIONAR_POLITICAS')")
     public ResponseEntity<Void> delete(@PathVariable String id) {
         politicaService.delete(id);
         return ResponseEntity.noContent().build();
@@ -57,14 +57,14 @@ public class PoliticaController {
 
     // POST /policies/{id}/publish
     @PostMapping("/{id}/publish")
-    @PreAuthorize("hasAuthority('ADMIN')")
+    @PreAuthorize("hasAuthority('PUBLICAR_POLITICA')")
     public ResponseEntity<PoliticaResponse> publish(@PathVariable String id) {
         return ResponseEntity.ok(politicaService.publicar(id));
     }
 
     // POST /policies/{id}/version
     @PostMapping("/{id}/version")
-    @PreAuthorize("hasAuthority('ADMIN')")
+    @PreAuthorize("hasAuthority('VERSIONAR_POLITICA')")
     public ResponseEntity<PoliticaResponse> crearVersion(@PathVariable String id) {
         return ResponseEntity.status(HttpStatus.CREATED).body(politicaService.crearVersion(id));
     }

@@ -33,7 +33,7 @@ export const routes: Routes = [
   {
     path: 'policies/new',
     canActivate: [authGuard],
-    loadComponent: () => import('./policies/policy-form/policy-form.component').then(m => m.PolicyFormComponent)
+    loadComponent: () => import('./policies/new-policy/new-policy.component').then(m => m.NewPolicyComponent)
   },
   {
     path: 'policies/:id',

@@ -1,0 +1,206 @@
+{
+  "task": "generate_advanced_workflow_dataset",
+  "language": "es",
+  "output_format": "json",
+  "context": {
+    "system_type": "Sistema empresarial de gestión de workflows, políticas de negocio y simulación de interacciones",
+    "purpose": [
+      "gestión de solicitudes",
+      "ejecución de workflows",
+      "validación de políticas de negocio",
+      "aprobaciones humanas y automáticas",
+      "observaciones",
+      "rechazos",
+      "excepciones",
+      "escalaciones",
+      "auditoría",
+      "simulación de escenarios",
+      "pruebas de interacción del sistema"
+    ],
+    "design_intent": "El dataset debe ser diseñado como si hubiera sido creado por un experto en políticas empresariales complejas, control interno, riesgo, cumplimiento y operación real."
+  },
+  "objective": "Generar directamente un dataset avanzado, realista, coherente y útil para probar un motor de workflow y reglas de negocio, permitiendo simular conflictos, errores, escalaciones, dependencias y cambios de estado.",
+  "workflow_types": [
+    "Solicitud de compra",
+    "Solicitud de licencia o permiso",
+    "Solicitud de reembolso",
+    "Contratación de proveedor o servicio",
+    "Solicitud de excepción o aprobación especial"
+  ],
+  "expert_role": [
+    "analista funcional senior",
+    "arquitecto de procesos",
+    "especialista en control interno",
+    "diseñador de políticas empresariales",
+    "experto en excepciones y errores operativos"
+  ],
+  "requirements": {
+    "records_per_workflow": 20,
+    "total_records": 100,
+    "must_include_cases": [
+      "flujo normal",
+      "aprobación simple",
+      "aprobación múltiple",
+      "observación",
+      "rechazo",
+      "excepción",
+      "escalación",
+      "bloqueo",
+      "devolución",
+      "cancelación",
+      "dependencia con otro proceso",
+      "conflicto entre políticas",
+      "error por datos incompletos",
+      "error por documentos inválidos",
+      "error por vencimiento",
+      "error por falta de respuesta",
+      "error por inconsistencia de datos",
+      "cambio de ruta por riesgo",
+      "validación manual",
+      "validación automática"
+    ],
+    "policy_conflict_examples": [
+      "una política de urgencia entra en conflicto con una política de control",
+      "una política financiera entra en conflicto con una excepción gerencial",
+      "una política de documentación completa entra en conflicto con una solicitud prioritaria",
+      "una política de presupuesto entra en conflicto con una necesidad operativa crítica",
+      "una política de proveedor habilitado entra en conflicto con un caso urgente",
+      "una política de licencia entra en conflicto con continuidad operativa",
+      "una política de reembolso entra en conflicto con topes internos",
+      "una política de cumplimiento obliga revisión legal aunque el flujo quería aprobación rápida"
+    ]
+  },
+  "dataset_design": {
+    "instruction": "Para cada workflow, primero define una estructura de datos robusta y luego genera los registros.",
+    "suggested_fields": [
+      "id_solicitud",
+      "tipo_workflow",
+      "fecha_creacion",
+      "fecha_evento",
+      "area_solicitante",
+      "unidad_negocio",
+      "solicitante",
+      "cargo_solicitante",
+      "antiguedad",
+      "supervisor",
+      "prioridad",
+      "urgencia",
+      "impacto_operativo",
+      "monto",
+      "moneda",
+      "presupuesto_disponible",
+      "centro_costo",
+      "proveedor_registrado",
+      "proveedor_observado",
+      "historial_solicitante",
+      "documentos_requeridos",
+      "documentos_completos",
+      "documentos_validados",
+      "nivel_riesgo",
+      "requiere_revision_legal",
+      "requiere_finanzas",
+      "requiere_rrhh",
+      "requiere_direccion",
+      "tiempo_maximo_respuesta",
+      "tiempo_real_respuesta",
+      "estado_actual",
+      "subproceso_activado",
+      "politica_principal",
+      "politicas_secundarias",
+      "conflicto_politicas",
+      "tipo_conflicto",
+      "resolucion_conflicto",
+      "error_detectado",
+      "tipo_error",
+      "accion_correctiva",
+      "resultado_final",
+      "auditoria_requerida",
+      "observaciones_sistema"
+    ],
+    "note": "Los campos pueden ajustarse según cada workflow, pero deben mantener este nivel de riqueza y complejidad."
+  },
+  "error_model": {
+    "input_errors": [
+      "campos faltantes",
+      "documentos incompletos",
+      "datos inconsistentes",
+      "monto inválido",
+      "fechas incoherentes",
+      "identificación errónea del solicitante",
+      "duplicidad de solicitud"
+    ],
+    "process_errors": [
+      "aprobador no responde",
+      "aprobador rechaza por falta de sustento",
+      "proveedor no habilitado",
+      "presupuesto no disponible",
+      "subproceso fallido",
+      "validación externa caída",
+      "dependencia pendiente",
+      "solicitud bloqueada por otra solicitud activa"
+    ],
+    "policy_errors": [
+      "dos políticas contradictorias",
+      "política principal no puede resolverse automáticamente",
+      "excepción gerencial contradice control interno",
+      "urgencia contradice cumplimiento",
+      "solicitud cumple una regla pero incumple otra obligatoria"
+    ],
+    "transition_errors": [
+      "solicitud intenta avanzar sin requisito completo",
+      "intento de aprobación fuera de secuencia",
+      "intento de cierre sin resolución",
+      "intento de pago sin aprobación final",
+      "intento de contratación sin proveedor validado"
+    ],
+    "temporal_errors": [
+      "plazo vencido",
+      "falta de respuesta",
+      "escalación automática",
+      "cierre por abandono",
+      "reactivación fuera de plazo"
+    ]
+  },
+  "simulation_focus": {
+    "goal": "Cada registro debe permitir simular la interacción del sistema y la evolución del caso.",
+    "events_to_simulate": [
+      "usuario crea solicitud",
+      "sistema valida datos",
+      "sistema detecta documentos faltantes",
+      "sistema aplica políticas",
+      "sistema deriva a aprobador",
+      "aprobador observa",
+      "solicitante corrige",
+      "sistema reevalúa",
+      "se activa un subproceso",
+      "se produce un error",
+      "se aplica una escalación",
+      "se resuelve conflicto entre políticas",
+      "el caso termina aprobado, rechazado, cancelado o vencido"
+    ]
+  },
+  "output_structure": {
+    "per_workflow": {
+      "A": "Definición del workflow: nombre, objetivo, complejidad, actores, políticas principales, conflictos típicos, errores típicos",
+      "B": "Estructura del dataset: lista clara de campos",
+      "C": "Dataset del workflow: 20 registros en JSON",
+      "D": "Casos destacados del workflow: conflicto de políticas, error complejo, escalación, excepción, dependencia con otro proceso"
+    },
+    "final_sections": [
+      "Matriz de conflictos de políticas: mostrar qué tipos de conflicto aparecen, entre qué políticas chocan, cómo se resolvieron, cuáles requieren intervención manual y cuáles pueden resolverse automáticamente",
+      "Casos ideales para simular con un botón de interacción: seleccionar los mejores casos del dataset y explicar por qué son buenos para mostrar cambio de estado, error, corrección, reintento, escalación, decisión automática, decisión manual y cierre del caso"
+    ]
+  },
+  "quality_constraints": [
+    "Redacción en español",
+    "Contexto empresarial latinoamericano",
+    "Coherencia entre campos",
+    "Casos realmente útiles para pruebas",
+    "Políticas no triviales",
+    "Errores bien pensados",
+    "Conflictos creíbles",
+    "Estados consistentes",
+    "Resultados finales lógicos"
+  ],
+  "final_instruction": "Genera todo con mentalidad de producto real empresarial, no de ejercicio académico simple. Quiero un dataset robusto, profundo, bien pensado y preparado para probar lógica compleja de workflows y políticas de negocio."
+}

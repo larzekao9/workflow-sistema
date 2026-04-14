@@ -99,7 +99,10 @@ export class AppComponent implements OnInit {
       filter((event): event is NavigationEnd => event instanceof NavigationEnd),
       map((event: NavigationEnd) => {
         const url = event.urlAfterRedirects;
-        return url !== '/login' && url !== '/register';
+        return url !== '/login'
+          && url !== '/register'
+          && !url.includes('/flow')
+          && url !== '/policies/new';
       }),
       startWith(!this.isAuthRoute())
     );
@@ -111,6 +114,9 @@ export class AppComponent implements OnInit {
 
   private isAuthRoute(): boolean {
     const url = this.router.url;
-    return url === '/login' || url === '/register';
+    return url === '/login'
+      || url === '/register'
+      || url.includes('/flow')
+      || url === '/policies/new';
   }
 }

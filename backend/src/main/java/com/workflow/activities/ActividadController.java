@@ -29,14 +29,14 @@ public class ActividadController {
 
     // POST /activities
     @PostMapping("/activities")
-    @PreAuthorize("hasAuthority('ADMIN')")
+    @PreAuthorize("hasAuthority('GESTIONAR_POLITICAS')")
     public ResponseEntity<ActividadResponse> create(@Valid @RequestBody CreateActividadRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(actividadService.create(request));
     }
 
     // PUT /activities/{id}
     @PutMapping("/activities/{id}")
-    @PreAuthorize("hasAuthority('ADMIN')")
+    @PreAuthorize("hasAuthority('GESTIONAR_POLITICAS')")
     public ResponseEntity<ActividadResponse> update(
             @PathVariable String id,
             @Valid @RequestBody UpdateActividadRequest request) {
@@ -45,7 +45,7 @@ public class ActividadController {
 
     // DELETE /activities/{id}
     @DeleteMapping("/activities/{id}")
-    @PreAuthorize("hasAuthority('ADMIN')")
+    @PreAuthorize("hasAuthority('GESTIONAR_POLITICAS')")
     public ResponseEntity<Void> delete(@PathVariable String id) {
         actividadService.delete(id);
         return ResponseEntity.noContent().build();
