@@ -129,22 +129,40 @@ public class PoliticaService {
     }
 
     // -----------------------------------------------------------------------
-    // Soft delete → INACTIVA
+    // Hard delete → elimina la política y sus actividades de la base de datos
     // -----------------------------------------------------------------------
 
     public void delete(String id) {
         Politica politica = findOrThrow(id);
 
-        // Permitir desactivar solo si no está ya ARCHIVADA
-        if (politica.getEstado() == Politica.EstadoPolitica.ARCHIVADA) {
-            throw new BadRequestException("La política ya está ARCHIVADA y no puede ser desactivada");
+        // Eliminar todas las actividades asociadas
+        List<Actividad> actividades = actividadRepository.findByPoliticaId(id);
+        if (!actividades.isEmpty()) {
+            actividadRepository.deleteAll(actividades);
+            log.info("Actividades eliminadas para política id={}: {} actividad(es)", id, actividades.size());
         }
 
-        politica.setEstado(Politica.EstadoPolitica.INACTIVA);
-        politica.setActualizadoEn(LocalDateTime.now());
-        politicaRepository.save(politica);
+        politicaRepository.deleteById(id);
+        log.info("Política eliminada permanentemente: id='{}', nombre='{}', por usuario={}",
+                id, politica.getNombre(), getCurrentUserId());
+    }
 
-        log.info("Política desactivada (soft delete): id={}, por usuario={}", id, getCurrentUserId());
+    // -----------------------------------------------------------------------
+    // Eliminar TODAS las políticas (uso administrativo / desarrollo)
+    // -----------------------------------------------------------------------
+
+    public int deleteAll() {
+        String userId = getCurrentUserId();
+        long totalActividades = actividadRepository.count();
+        long totalPoliticas = politicaRepository.count();
+
+        actividadRepository.deleteAll();
+        politicaRepository.deleteAll();
+
+        log.warn("ELIMINACIÓN MASIVA: {} política(s) y {} actividad(es) eliminadas por usuario={}",
+                totalPoliticas, totalActividades, userId);
+
+        return (int) totalPoliticas;
     }
 
     // -----------------------------------------------------------------------

@@ -159,6 +159,13 @@ import { CreatePoliticaDialogComponent } from '../create-politica-dialog/create-
                   matTooltip="Desactivar">
                   <mat-icon>pause_circle</mat-icon>
                 </button>
+                <button
+                  mat-icon-button
+                  color="warn"
+                  (click)="deletePolitica(p)"
+                  matTooltip="Eliminar permanentemente">
+                  <mat-icon>delete</mat-icon>
+                </button>
               </td>
             </ng-container>
 
@@ -307,6 +314,26 @@ export class PoliciesListComponent implements OnInit, AfterViewInit {
           this.loadPoliticas();
         },
         error: (err) => this.snackBar.open(err?.error?.message || 'Error al desactivar', 'Cerrar', { duration: 4000 })
+      });
+    });
+  }
+
+  deletePolitica(p: Politica): void {
+    const ref = this.dialog.open(ConfirmDialogComponent, {
+      data: {
+        title: 'Eliminar política',
+        message: `¿Confirmás que querés eliminar permanentemente "${p.nombre}"? Esta acción no puede revertirse.`
+      },
+      width: '420px'
+    });
+    ref.afterClosed().subscribe(confirmed => {
+      if (!confirmed) return;
+      this.politicaService.delete(p.id).subscribe({
+        next: () => {
+          this.snackBar.open('Política eliminada correctamente', 'Cerrar', { duration: 3000 });
+          this.loadPoliticas();
+        },
+        error: (err) => this.snackBar.open(err?.error?.message || 'Error al eliminar', 'Cerrar', { duration: 4000 })
       });
     });
   }

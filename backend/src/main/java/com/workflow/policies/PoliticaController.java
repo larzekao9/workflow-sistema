@@ -8,6 +8,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/policies")
 @RequiredArgsConstructor
@@ -47,12 +49,23 @@ public class PoliticaController {
         return ResponseEntity.ok(politicaService.update(id, request));
     }
 
-    // DELETE /policies/{id} → soft delete (estado INACTIVA)
+    // DELETE /policies/{id} → hard delete (elimina de la base de datos)
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('GESTIONAR_POLITICAS')")
     public ResponseEntity<Void> delete(@PathVariable String id) {
         politicaService.delete(id);
         return ResponseEntity.noContent().build();
+    }
+
+    // DELETE /policies → elimina TODAS las políticas y sus actividades
+    @DeleteMapping
+    @PreAuthorize("hasAuthority('GESTIONAR_POLITICAS')")
+    public ResponseEntity<Map<String, Object>> deleteAll() {
+        int eliminadas = politicaService.deleteAll();
+        return ResponseEntity.ok(Map.of(
+                "mensaje", "Eliminación masiva completada",
+                "politicasEliminadas", eliminadas
+        ));
     }
 
     // POST /policies/{id}/publish

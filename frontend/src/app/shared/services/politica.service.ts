@@ -49,6 +49,10 @@ export class PoliticaService {
     return this.http.delete<void>(`${this.url}/${id}`);
   }
 
+  deleteAll(): Observable<{ mensaje: string; politicasEliminadas: number }> {
+    return this.http.delete<{ mensaje: string; politicasEliminadas: number }>(this.url);
+  }
+
   publish(id: string): Observable<Politica> {
     return this.http.post<Politica>(`${this.url}/${id}/publish`, {});
   }
