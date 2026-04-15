@@ -22,6 +22,7 @@ public class FormularioResponse {
     private String creadoPorId;
     private Instant creadoEn;
     private Instant actualizadoEn;
+    private Object formJsSchema;
 
     // -----------------------------------------------------------------------
     // Proyecciones anidadas

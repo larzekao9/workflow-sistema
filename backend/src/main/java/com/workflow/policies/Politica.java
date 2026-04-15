@@ -94,4 +94,7 @@ public class Politica {
 
     @Field("actualizado_en")
     private LocalDateTime actualizadoEn;
+
+    @Field("bpmn_xml")
+    private String bpmnXml;
 }

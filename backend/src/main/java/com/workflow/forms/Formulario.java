@@ -160,4 +160,8 @@ public class Formulario {
 
     @Field("actualizado_en")
     private Instant actualizadoEn;
+
+    // Schema nativo de form-js (Sprint 2.9) — almacenado como documento BSON; null si aún usa secciones custom
+    @Field("form_js_schema")
+    private Object formJsSchema;
 }

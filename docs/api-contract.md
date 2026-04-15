@@ -1,7 +1,7 @@
 # Contrato de API — workflow-sistema
 Base URL: `http://localhost:8080`
 Auth: Bearer JWT en header `Authorization` (excepto /auth/*)
-Última actualización: 2026-04-12 | Sprint 2.2 completado
+Última actualización: 2026-04-15 | Sprint 2.8 completado
 
 ---
 
@@ -218,6 +218,47 @@ Soft delete (`activo = false`). Nunca eliminación física.
 PoliticaRelacionResponse:
 ```json
 { "id", "politicaOrigenId", "politicaOrigenNombre", "politicaDestinoId", "politicaDestinoNombre", "tipoRelacion", "prioridad", "descripcion", "activo", "creadoPorId", "creadoEn" }
+```
+
+---
+
+## Decisions `[GET público | escritura requiere GESTIONAR_POLITICAS]`
+
+### POST /decisions → 201 `DecisionResponse`
+Crea una tabla de decisión DMN asociada a un Exclusive Gateway de una política.
+Genera un DMN XML inicial válido para dmn-js.
+Request:
+```json
+{ "politicaId": "str", "gatewayBpmnId": "str", "nombre": "str (2-120)" }
+```
+
+### GET /decisions/{id} → 200 `DecisionResponse`
+Detalle sin dmnXml. Para obtener el XML usar `GET /decisions/{id}/dmn`.
+
+### GET /decisions/by-politica/{politicaId} → 200 `DecisionResponse[]`
+Lista todas las tablas DMN de una política, sin dmnXml.
+
+### GET /decisions/by-gateway?politicaId=&gatewayBpmnId= → 200 `DecisionResponse` | 404
+Busca la tabla DMN de un Exclusive Gateway específico.
+
+### GET /decisions/{id}/dmn → 200
+Retorna el XML DMN completo. Si no había XML guardado, genera y persiste uno inicial.
+Response: `{ "dmnXml": "str" }`
+
+### PUT /decisions/{id}/dmn → 204
+Persiste el XML DMN completo (guardado por dmn-js).
+Request: `{ "dmnXml": "str" }`
+
+### DELETE /decisions/{id} → 204
+Elimina la tabla de decisión.
+
+DecisionResponse:
+```json
+{
+  "id", "nombre", "dmnXml" (null en listados, presente en detalle y /dmn),
+  "politicaId", "gatewayBpmnId",
+  "creadoPorId", "creadoEn", "actualizadoEn"
+}
 ```
 
 ---

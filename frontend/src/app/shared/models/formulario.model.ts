@@ -47,12 +47,14 @@ export interface FormularioResponse {
   creadoPorId: string;
   creadoEn: string;
   actualizadoEn: string;
+  formJsSchema?: object;
 }
 
 export interface CreateFormularioRequest {
   nombre: string;
   descripcion: string;
   secciones: Omit<SeccionFormulario, 'id'>[];
+  formJsSchema?: object;
 }
 
 export interface UpdateFormularioRequest {
@@ -60,6 +62,7 @@ export interface UpdateFormularioRequest {
   descripcion?: string;
   estado?: EstadoFormulario;
   secciones?: Omit<SeccionFormulario, 'id'>[];
+  formJsSchema?: object;
 }
 
 export interface PageFormulario {

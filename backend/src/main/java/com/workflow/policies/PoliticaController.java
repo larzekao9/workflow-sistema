@@ -81,4 +81,20 @@ public class PoliticaController {
     public ResponseEntity<PoliticaResponse> crearVersion(@PathVariable String id) {
         return ResponseEntity.status(HttpStatus.CREATED).body(politicaService.crearVersion(id));
     }
+
+    // GET /policies/{id}/bpmn
+    @GetMapping("/{id}/bpmn")
+    public ResponseEntity<Map<String, String>> getBpmn(@PathVariable String id) {
+        return ResponseEntity.ok(politicaService.getBpmn(id));
+    }
+
+    // PUT /policies/{id}/bpmn
+    @PutMapping("/{id}/bpmn")
+    @PreAuthorize("hasAuthority('GESTIONAR_POLITICAS')")
+    public ResponseEntity<Void> saveBpmn(
+            @PathVariable String id,
+            @RequestBody Map<String, String> body) {
+        politicaService.saveBpmn(id, body.get("bpmnXml"));
+        return ResponseEntity.ok().build();
+    }
 }

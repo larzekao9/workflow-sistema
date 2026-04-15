@@ -53,6 +53,27 @@ public class PoliticaService {
         return toResponse(politica);
     }
 
+    public Map<String, String> getBpmn(String id) {
+        Politica politica = findOrThrow(id);
+        String xml = politica.getBpmnXml();
+        if (xml == null || xml.isBlank()) {
+            xml = buildInitialBpmnXml(id);
+        }
+        return Map.of("bpmnXml", xml);
+    }
+
+    public void saveBpmn(String id, String bpmnXml) {
+        Politica politica = findOrThrow(id);
+        if (politica.getEstado() != Politica.EstadoPolitica.BORRADOR) {
+            throw new BadRequestException(
+                "Solo se puede editar el diagrama de una política en estado BORRADOR");
+        }
+        politica.setBpmnXml(bpmnXml);
+        politica.setActualizadoEn(LocalDateTime.now());
+        politicaRepository.save(politica);
+        log.info("BPMN XML guardado: politicaId={}, por usuario={}", id, getCurrentUserId());
+    }
+
     // -----------------------------------------------------------------------
     // Creación
     // -----------------------------------------------------------------------
@@ -81,6 +102,11 @@ public class PoliticaService {
                 .build();
 
         Politica saved = politicaRepository.save(politica);
+
+        // Inicializar BPMN XML vacío
+        String initialXml = buildInitialBpmnXml(saved.getId());
+        saved.setBpmnXml(initialXml);
+        politicaRepository.save(saved);
 
         log.info("Política creada: id={}, nombre='{}', por usuario={}", saved.getId(), saved.getNombre(), userId);
 
@@ -173,7 +199,21 @@ public class PoliticaService {
         Politica politica = findOrThrow(id);
         verificarBorrador(politica);
 
+        // Si la política tiene BPMN XML pero no tiene actividades legacy,
+        // hacer validación simplificada (Sprint 2.7 agrega bpmnlint real)
         List<Actividad> actividades = actividadRepository.findByPoliticaId(id);
+        if (actividades.isEmpty()) {
+            if (politica.getBpmnXml() == null || politica.getBpmnXml().isBlank()) {
+                throw new BadRequestException("La política no tiene diagrama BPMN. Abre el editor y diseña el flujo antes de publicar.");
+            }
+            // BPMN presente → publicar sin validaciones de actividades legacy
+            politica.setEstado(Politica.EstadoPolitica.ACTIVA);
+            politica.setActualizadoEn(LocalDateTime.now());
+            Politica saved = politicaRepository.save(politica);
+            log.info("Política publicada (ACTIVA, modo BPMN): id={}, por usuario={}", id, getCurrentUserId());
+            return toResponse(saved);
+        }
+        // Si hay actividades legacy, continuar con el flujo de validación existente
 
         // 1. Exactamente 1 nodo INICIO
         List<Actividad> inicios = actividades.stream()
@@ -349,6 +389,13 @@ public class PoliticaService {
         // Actualizar lista de actividades en la nueva política
         List<String> nuevosIds = savedCopias.stream().map(Actividad::getId).collect(Collectors.toList());
         savedVersion.setActividadIds(nuevosIds);
+
+        // Copiar BPMN XML de la política original
+        if (original.getBpmnXml() != null && !original.getBpmnXml().isBlank()) {
+            savedVersion.setBpmnXml(original.getBpmnXml());
+        } else {
+            savedVersion.setBpmnXml(buildInitialBpmnXml(savedVersion.getId()));
+        }
         savedVersion.setActualizadoEn(LocalDateTime.now());
         politicaRepository.save(savedVersion);
 
@@ -361,6 +408,22 @@ public class PoliticaService {
     // -----------------------------------------------------------------------
     // Helpers privados
     // -----------------------------------------------------------------------
+
+    private String buildInitialBpmnXml(String politicaId) {
+        String processId = "Process_" + politicaId.replaceAll("[^a-zA-Z0-9]", "_");
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
+            "<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n" +
+            "  xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\"\n" +
+            "  xmlns:dc=\"http://www.omg.org/spec/DD/20100524/DC\"\n" +
+            "  targetNamespace=\"http://workflow-sistema/bpmn\"\n" +
+            "  id=\"Definitions_" + politicaId.replaceAll("[^a-zA-Z0-9]", "_") + "\">\n" +
+            "  <bpmn:process id=\"" + processId + "\" isExecutable=\"true\" name=\"" + processId + "\">\n" +
+            "  </bpmn:process>\n" +
+            "  <bpmndi:BPMNDiagram id=\"BPMNDiagram_1\">\n" +
+            "    <bpmndi:BPMNPlane id=\"BPMNPlane_1\" bpmnElement=\"" + processId + "\"/>\n" +
+            "  </bpmndi:BPMNDiagram>\n" +
+            "</bpmn:definitions>";
+    }
 
     private Politica findOrThrow(String id) {
         return politicaRepository.findById(id)

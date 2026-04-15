@@ -71,6 +71,11 @@ export const routes: Routes = [
     loadComponent: () => import('./forms/form-detail/form-detail.component').then(m => m.FormDetailComponent)
   },
   {
+    path: 'decisions/:id/edit',
+    canActivate: [authGuard],
+    loadComponent: () => import('./decisions/dmn-editor/dmn-editor.component').then(m => m.DmnEditorComponent)
+  },
+  {
     path: 'tramites',
     canActivate: [authGuard],
     loadComponent: () => import('./tramites/tramites.component').then(m => m.TramitesComponent)

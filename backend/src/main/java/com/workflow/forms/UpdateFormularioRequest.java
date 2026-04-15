@@ -24,6 +24,9 @@ public class UpdateFormularioRequest {
     @Valid
     private List<SeccionRequest> secciones;
 
+    // Schema nativo de form-js (Sprint 2.9) — null = no modificar
+    private Object formJsSchema;
+
     // -----------------------------------------------------------------------
     // DTOs anidados — misma estructura que en CreateFormularioRequest
     // -----------------------------------------------------------------------
