@@ -24,6 +24,9 @@ public class CreateFormularioRequest {
 
     private String descripcion;
 
+    // Schema form-js (opcional en creación; si se omite queda null)
+    private Object formJsSchema;
+
     @NotEmpty(message = "El formulario debe tener al menos una sección")
     @Valid
     private List<SeccionRequest> secciones;

@@ -78,6 +78,7 @@ public class FormularioService {
                 .descripcion(request.getDescripcion())
                 .estado(Formulario.EstadoFormulario.ACTIVO)
                 .secciones(secciones)
+                .formJsSchema(request.getFormJsSchema())
                 .creadoPorId(creadoPorId)
                 .creadoEn(Instant.now())
                 .actualizadoEn(Instant.now())
@@ -118,6 +119,10 @@ public class FormularioService {
             validarNombresCampoUnicos(secciones);
             validarOpcionesPorTipo(secciones);
             formulario.setSecciones(secciones);
+        }
+
+        if (request.getFormJsSchema() != null) {
+            formulario.setFormJsSchema(request.getFormJsSchema());
         }
 
         formulario.setActualizadoEn(Instant.now());
@@ -276,6 +281,7 @@ public class FormularioService {
                 .creadoPorId(f.getCreadoPorId())
                 .creadoEn(f.getCreadoEn())
                 .actualizadoEn(f.getActualizadoEn())
+                .formJsSchema(f.getFormJsSchema())
                 .build();
     }
 

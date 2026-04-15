@@ -64,4 +64,12 @@ export class PoliticaService {
   newVersion(id: string): Observable<Politica> {
     return this.http.post<Politica>(`${this.url}/${id}/version`, {});
   }
+
+  getBpmn(id: string): Observable<{ bpmnXml: string }> {
+    return this.http.get<{ bpmnXml: string }>(`${this.url}/${id}/bpmn`);
+  }
+
+  saveBpmn(id: string, bpmnXml: string): Observable<void> {
+    return this.http.put<void>(`${this.url}/${id}/bpmn`, { bpmnXml });
+  }
 }

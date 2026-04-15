@@ -1,0 +1,19 @@
+{
+  "name": "Workflow",
+  "uri": "http://workflow-sistema/schema/1.0",
+  "prefix": "workflow",
+  "xml": { "tagAlias": "lowerCase" },
+  "types": [
+    {
+      "name": "TaskConfig",
+      "superClass": ["Element"],
+      "meta": { "allowedIn": ["*"] },
+      "properties": [
+        { "name": "responsableRolId",  "isAttr": true, "type": "String" },
+        { "name": "formularioId",      "isAttr": true, "type": "String" },
+        { "name": "tiempoLimiteHoras", "isAttr": true, "type": "Integer" },
+        { "name": "slaEscalacionHoras","isAttr": true, "type": "Integer" }
+      ]
+    }
+  ]
+}

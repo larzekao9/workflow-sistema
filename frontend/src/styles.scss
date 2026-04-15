@@ -27,3 +27,29 @@ $theme: mat.define-light-theme((
 body {
   font-family: Roboto, "Helvetica Neue", sans-serif;
 }
+
+/* ── bpmn-js ─────────────────────────────── */
+@import 'bpmn-js/dist/assets/diagram-js.css';
+@import 'bpmn-js/dist/assets/bpmn-font/css/bpmn.css';
+@import 'bpmn-js/dist/assets/bpmn-js.css';
+@import '@bpmn-io/properties-panel/dist/assets/properties-panel.css';
+@import 'diagram-js-minimap/assets/diagram-js-minimap.css';
+@import 'bpmn-js-token-simulation/assets/css/bpmn-js-token-simulation.css';
+@import 'bpmn-js-bpmnlint/dist/assets/css/bpmn-js-bpmnlint.css';
+
+/* ── dmn-js ──────────────────────────────── */
+@import 'dmn-js/dist/assets/diagram-js.css';
+@import 'dmn-js/dist/assets/dmn-font/css/dmn.css';
+@import 'dmn-js/dist/assets/dmn-js-shared.css';
+@import 'dmn-js/dist/assets/dmn-js-drd.css';
+@import 'dmn-js/dist/assets/dmn-js-decision-table.css';
+@import 'dmn-js/dist/assets/dmn-js-decision-table-controls.css';
+@import 'dmn-js/dist/assets/dmn-js-literal-expression.css';
+
+/* ── form-js ──────────────────────────────── */
+@import '@bpmn-io/form-js/dist/assets/form-js-base.css';
+@import '@bpmn-io/form-js/dist/assets/form-js.css';
+@import '@bpmn-io/form-js/dist/assets/form-js-editor-base.css';
+@import '@bpmn-io/form-js/dist/assets/form-js-editor.css';
+@import '@bpmn-io/form-js/dist/assets/properties-panel.css';
+@import '@bpmn-io/form-js/dist/assets/flatpickr/light.css';
