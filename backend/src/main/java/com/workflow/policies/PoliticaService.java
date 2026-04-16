@@ -3,13 +3,17 @@ package com.workflow.policies;
 import com.workflow.activities.Actividad;
 import com.workflow.activities.ActividadRepository;
 import com.workflow.shared.exception.BadRequestException;
+import com.workflow.shared.exception.ConflictException;
 import com.workflow.shared.exception.ResourceNotFoundException;
+import com.workflow.users.User;
+import com.workflow.users.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
@@ -24,6 +28,9 @@ public class PoliticaService {
 
     private final PoliticaRepository politicaRepository;
     private final ActividadRepository actividadRepository;
+    private final CollaborationService collaborationService;
+    private final UserRepository userRepository;
+    private final SimpMessagingTemplate messagingTemplate;
 
     // -----------------------------------------------------------------------
     // Consultas
@@ -53,25 +60,65 @@ public class PoliticaService {
         return toResponse(politica);
     }
 
-    public Map<String, String> getBpmn(String id) {
+    public Map<String, Object> getBpmn(String id) {
         Politica politica = findOrThrow(id);
         String xml = politica.getBpmnXml();
-        if (xml == null || xml.isBlank()) {
+        boolean needsRegeneration = xml == null || xml.isBlank() || !xml.contains("BPMNDiagram");
+        if (needsRegeneration) {
             xml = buildInitialBpmnXml(id);
+            // Si no tenía XML previo, persistir para evitar regenerar en cada llamada
+            if (politica.getBpmnXml() == null || politica.getBpmnXml().isBlank()) {
+                politica.setBpmnXml(xml);
+                politicaRepository.save(politica);
+            }
+            log.info("BPMN XML regenerado para politicaId={} (XML previo inválido o ausente)", id);
         }
-        return Map.of("bpmnXml", xml);
+        int version = politica.getBpmnVersion() != null ? politica.getBpmnVersion() : 0;
+        return Map.of("bpmnXml", xml, "bpmnVersion", version);
     }
 
-    public void saveBpmn(String id, String bpmnXml) {
+    public Map<String, Object> saveBpmn(String id, String bpmnXml, Integer clientBpmnVersion) {
         Politica politica = findOrThrow(id);
-        if (politica.getEstado() != Politica.EstadoPolitica.BORRADOR) {
-            throw new BadRequestException(
-                "Solo se puede editar el diagrama de una política en estado BORRADOR");
+        verificarBorrador(politica);
+        // Normalizar bpmnVersion null (políticas previas al Sprint 2.10)
+        int serverVersion = politica.getBpmnVersion() != null ? politica.getBpmnVersion() : 0;
+        if (clientBpmnVersion != null && clientBpmnVersion != serverVersion) {
+            throw new ConflictException(
+                "Otro colaborador guardó cambios después de tu última carga. Recarga el editor para continuar.");
         }
         politica.setBpmnXml(bpmnXml);
+        politica.setBpmnVersion(serverVersion + 1);
         politica.setActualizadoEn(LocalDateTime.now());
         politicaRepository.save(politica);
-        log.info("BPMN XML guardado: politicaId={}, por usuario={}", id, getCurrentUserId());
+
+        String savedByEmail = getCurrentUserId();
+        log.info("BPMN XML guardado: politicaId={}, bpmnVersion={}, por={}", id, politica.getBpmnVersion(), savedByEmail);
+
+        // Broadcast en tiempo real a los demás colaboradores
+        Map<String, Object> update = new LinkedHashMap<>();
+        update.put("bpmnXml", bpmnXml);
+        update.put("bpmnVersion", politica.getBpmnVersion());
+        update.put("savedByEmail", savedByEmail);
+        messagingTemplate.convertAndSend("/topic/policy/" + id + "/bpmn", update);
+
+        return Map.of("bpmnVersion", politica.getBpmnVersion());
+    }
+
+    public List<CollaboratorInfo> joinCollaboration(String id) {
+        findOrThrow(id); // validate policy exists
+        String email = getCurrentUserId(); // email is the subject
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado"));
+        return collaborationService.join(id, user.getId(), user.getNombreCompleto(), user.getEmail());
+    }
+
+    public void leaveCollaboration(String id, String userId) {
+        collaborationService.leave(id, userId);
+    }
+
+    public List<CollaboratorInfo> getCollaboratorsForPolicy(String id) {
+        findOrThrow(id);
+        return collaborationService.getCollaborators(id);
     }
 
     // -----------------------------------------------------------------------
@@ -410,17 +457,27 @@ public class PoliticaService {
     // -----------------------------------------------------------------------
 
     private String buildInitialBpmnXml(String politicaId) {
-        String processId = "Process_" + politicaId.replaceAll("[^a-zA-Z0-9]", "_");
+        String safeId = politicaId.replaceAll("[^a-zA-Z0-9]", "_");
+        String processId = "Process_" + safeId;
+        String defId    = "Definitions_" + safeId;
         return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
             "<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"\n" +
             "  xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\"\n" +
             "  xmlns:dc=\"http://www.omg.org/spec/DD/20100524/DC\"\n" +
             "  targetNamespace=\"http://workflow-sistema/bpmn\"\n" +
-            "  id=\"Definitions_" + politicaId.replaceAll("[^a-zA-Z0-9]", "_") + "\">\n" +
-            "  <bpmn:process id=\"" + processId + "\" isExecutable=\"true\" name=\"" + processId + "\">\n" +
+            "  id=\"" + defId + "\">\n" +
+            "  <bpmn:process id=\"" + processId + "\" isExecutable=\"true\">\n" +
+            "    <bpmn:startEvent id=\"StartEvent_1\" name=\"Inicio\"/>\n" +
             "  </bpmn:process>\n" +
             "  <bpmndi:BPMNDiagram id=\"BPMNDiagram_1\">\n" +
-            "    <bpmndi:BPMNPlane id=\"BPMNPlane_1\" bpmnElement=\"" + processId + "\"/>\n" +
+            "    <bpmndi:BPMNPlane id=\"BPMNPlane_1\" bpmnElement=\"" + processId + "\">\n" +
+            "      <bpmndi:BPMNShape id=\"_BPMNShape_StartEvent_1\" bpmnElement=\"StartEvent_1\">\n" +
+            "        <dc:Bounds x=\"179\" y=\"159\" width=\"36\" height=\"36\"/>\n" +
+            "        <bpmndi:BPMNLabel>\n" +
+            "          <dc:Bounds x=\"172\" y=\"202\" width=\"50\" height=\"14\"/>\n" +
+            "        </bpmndi:BPMNLabel>\n" +
+            "      </bpmndi:BPMNShape>\n" +
+            "    </bpmndi:BPMNPlane>\n" +
             "  </bpmndi:BPMNDiagram>\n" +
             "</bpmn:definitions>";
     }
