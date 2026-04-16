@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -84,17 +85,42 @@ public class PoliticaController {
 
     // GET /policies/{id}/bpmn
     @GetMapping("/{id}/bpmn")
-    public ResponseEntity<Map<String, String>> getBpmn(@PathVariable String id) {
+    public ResponseEntity<Map<String, Object>> getBpmn(@PathVariable String id) {
         return ResponseEntity.ok(politicaService.getBpmn(id));
     }
 
     // PUT /policies/{id}/bpmn
     @PutMapping("/{id}/bpmn")
     @PreAuthorize("hasAuthority('GESTIONAR_POLITICAS')")
-    public ResponseEntity<Void> saveBpmn(
+    public ResponseEntity<Map<String, Object>> saveBpmn(
             @PathVariable String id,
-            @RequestBody Map<String, String> body) {
-        politicaService.saveBpmn(id, body.get("bpmnXml"));
-        return ResponseEntity.ok().build();
+            @Valid @RequestBody SaveBpmnRequest body) {
+        Map<String, Object> result = politicaService.saveBpmn(id, body.bpmnXml(), body.bpmnVersion());
+        return ResponseEntity.ok(result);
+    }
+
+    // POST /policies/{id}/join — registrar colaborador activo
+    @PostMapping("/{id}/join")
+    @PreAuthorize("hasAuthority('GESTIONAR_POLITICAS')")
+    public ResponseEntity<List<CollaboratorInfo>> join(@PathVariable String id) {
+        List<CollaboratorInfo> collaborators = politicaService.joinCollaboration(id);
+        return ResponseEntity.ok(collaborators);
+    }
+
+    // POST /policies/{id}/leave — salir de la sesión colaborativa
+    @PostMapping("/{id}/leave")
+    @PreAuthorize("hasAuthority('GESTIONAR_POLITICAS')")
+    public ResponseEntity<Void> leave(
+            @PathVariable String id,
+            @RequestParam String userId) {
+        politicaService.leaveCollaboration(id, userId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // GET /policies/{id}/collaborators — lista de colaboradores activos
+    @GetMapping("/{id}/collaborators")
+    @PreAuthorize("hasAuthority('GESTIONAR_POLITICAS')")
+    public ResponseEntity<List<CollaboratorInfo>> getCollaborators(@PathVariable String id) {
+        return ResponseEntity.ok(politicaService.getCollaboratorsForPolicy(id));
     }
 }

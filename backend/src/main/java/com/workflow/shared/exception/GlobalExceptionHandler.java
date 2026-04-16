@@ -39,6 +39,12 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));
     }
 
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ErrorResponse> handleConflict(ConflictException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ErrorResponse(HttpStatus.CONFLICT.value(), ex.getMessage()));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex) {
         Map<String, String> fieldErrors = new HashMap<>();

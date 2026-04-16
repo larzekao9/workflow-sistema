@@ -21,9 +21,8 @@ export class PoliticaService {
     let params = new HttpParams();
     if (filters?.estado) params = params.set('estado', filters.estado);
     if (filters?.nombre) params = params.set('nombre', filters.nombre);
-    // Backend devuelve Page<PoliticaResponse> — extraemos el array content
     return this.http.get<any>(this.url, { params }).pipe(
-      map(res => res?.content ?? res)
+      map(res => Array.isArray(res) ? res : (res?.content ?? []))
     );
   }
 
@@ -32,9 +31,12 @@ export class PoliticaService {
   }
 
   getVersiones(versionPadreId: string): Observable<Politica[]> {
-    return this.http.get<Politica[]>(this.url, {
+    // Backend devuelve Page<T> — extraer .content para evitar n.filter crash
+    return this.http.get<any>(this.url, {
       params: new HttpParams().set('versionPadreId', versionPadreId)
-    });
+    }).pipe(
+      map(res => Array.isArray(res) ? res : (res?.content ?? []))
+    );
   }
 
   create(data: CreatePoliticaRequest): Observable<Politica> {
@@ -65,11 +67,11 @@ export class PoliticaService {
     return this.http.post<Politica>(`${this.url}/${id}/version`, {});
   }
 
-  getBpmn(id: string): Observable<{ bpmnXml: string }> {
-    return this.http.get<{ bpmnXml: string }>(`${this.url}/${id}/bpmn`);
+  getBpmn(id: string): Observable<{ bpmnXml: string; bpmnVersion: number }> {
+    return this.http.get<{ bpmnXml: string; bpmnVersion: number }>(`${this.url}/${id}/bpmn`);
   }
 
-  saveBpmn(id: string, bpmnXml: string): Observable<void> {
-    return this.http.put<void>(`${this.url}/${id}/bpmn`, { bpmnXml });
+  saveBpmn(id: string, bpmnXml: string, bpmnVersion?: number): Observable<{ bpmnVersion: number }> {
+    return this.http.put<{ bpmnVersion: number }>(`${this.url}/${id}/bpmn`, { bpmnXml, bpmnVersion });
   }
 }

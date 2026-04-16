@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.core.exceptions import AIServiceException, ValidationException, ai_service_exception_handler, validation_exception_handler
 from app.routers import policy_router, tramite_router, flow_router
+from app.routers import bpmn_router
 
 settings = get_settings()
 
@@ -27,6 +28,7 @@ app.add_exception_handler(ValidationException, validation_exception_handler)
 app.include_router(policy_router.router, prefix="/api/v1")
 app.include_router(tramite_router.router, prefix="/api/v1")
 app.include_router(flow_router.router, prefix="/api/v1")
+app.include_router(bpmn_router.router, prefix="/ai")
 
 
 @app.get("/health")

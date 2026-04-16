@@ -97,4 +97,8 @@ public class Politica {
 
     @Field("bpmn_xml")
     private String bpmnXml;
+
+    @Field("bpmn_version")
+    @Builder.Default
+    private Integer bpmnVersion = 0;
 }
