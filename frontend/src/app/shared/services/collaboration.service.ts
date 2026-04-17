@@ -148,10 +148,12 @@ export class CollaborationService implements OnDestroy {
   }
 
   private disconnectWebSocket(): void {
-    if (this.stompClient?.active) {
-      this.stompClient.deactivate();
-    }
+    // Siempre deactivate() independientemente de .active:
+    // cuando la sesión está en error/reconexión .active=false pero el timer
+    // interno de stompjs sigue corriendo — deactivate() lo cancela en cualquier estado.
+    const client = this.stompClient;
     this.stompClient = null;
+    client?.deactivate();
   }
 
   getInitials(nombreCompleto: string): string {

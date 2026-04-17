@@ -1,8 +1,8 @@
-import { Component, OnInit, ViewChild, AfterViewInit } from '@angular/core';
+import { Component, OnInit, ViewChild, AfterViewInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterModule } from '@angular/router';
 import { ReactiveFormsModule, FormControl } from '@angular/forms';
-import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
+import { debounceTime, distinctUntilChanged, skip } from 'rxjs/operators';
 
 import { MatTableModule, MatTableDataSource } from '@angular/material/table';
 import { MatPaginatorModule, MatPaginator, PageEvent } from '@angular/material/paginator';
@@ -113,7 +113,7 @@ import { CreatePoliticaDialogComponent } from '../create-politica-dialog/create-
                 <button
                   mat-raised-button
                   color="primary"
-                  *ngIf="p.estado === 'BORRADOR'"
+                  *ngIf="p.estado === 'BORRADOR' || p.estado === 'INACTIVA'"
                   [routerLink]="['/policies', p.id, 'flow']"
                   matTooltip="Abrir editor de flujo">
                   <mat-icon>edit_note</mat-icon>
@@ -132,8 +132,8 @@ import { CreatePoliticaDialogComponent } from '../create-politica-dialog/create-
                   mat-icon-button
                   color="accent"
                   [routerLink]="['/policies', p.id, 'edit']"
-                  [disabled]="p.estado !== 'BORRADOR'"
-                  matTooltip="Editar (solo BORRADOR)">
+                  [disabled]="p.estado === 'ACTIVA' || p.estado === 'ARCHIVADA'"
+                  matTooltip="Editar metadatos (nombre, descripción, tags)">
                   <mat-icon>edit</mat-icon>
                 </button>
                 <button
@@ -236,7 +236,8 @@ export class PoliciesListComponent implements OnInit, AfterViewInit {
     private politicaService: PoliticaService,
     private snackBar: MatSnackBar,
     private dialog: MatDialog,
-    private router: Router
+    private router: Router,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit(): void {
@@ -250,7 +251,10 @@ export class PoliciesListComponent implements OnInit, AfterViewInit {
       this.loadPoliticas();
     });
 
-    this.estadoControl.valueChanges.subscribe(() => {
+    // skip(1): mat-select escribe el valor inicial en el FormControl durante la
+    // inicialización del template, lo que dispara valueChanges una vez en vano.
+    // skip(1) ignora ese primer evento espurio; solo reacciona a cambios del usuario.
+    this.estadoControl.valueChanges.pipe(skip(1)).subscribe(() => {
       this.currentPage = 0;
       this.loadPoliticas();
     });
@@ -277,6 +281,7 @@ export class PoliciesListComponent implements OnInit, AfterViewInit {
         this.dataSource.data = res.content;
         this.totalElements = res.totalElements;
         this.isLoading = false;
+        this.cdr.detectChanges(); // fuerza actualización del MatPaginator
       },
       error: (err) => {
         this.isLoading = false;

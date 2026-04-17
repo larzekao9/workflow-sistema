@@ -64,7 +64,7 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
     <div class="bpmn-title-wrap">
       <span *ngIf="!editingName" class="bpmn-title"
             (click)="startEditingName()"
-            [matTooltip]="politica?.estado !== 'BORRADOR' ? '' : 'Clic para editar nombre'">
+            [matTooltip]="!isEditable ? '' : 'Clic para editar nombre'">
         {{ politica?.nombre || 'Editor de Flujo' }}
       </span>
       <input *ngIf="editingName"
@@ -108,7 +108,7 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
     </div>
 
     <!-- Dirty indicator -->
-    <span *ngIf="isDirty && politica?.estado === 'BORRADOR'" class="bpmn-dirty-indicator" matTooltip="Cambios sin guardar">
+    <span *ngIf="isDirty && isEditable" class="bpmn-dirty-indicator" matTooltip="Cambios sin guardar">
       <mat-icon>edit</mat-icon>
     </span>
     <span *ngIf="!isDirty && lastSaved" class="bpmn-saved-indicator" matTooltip="Guardado">
@@ -120,16 +120,16 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
       <mat-icon>fit_screen</mat-icon>
     </button>
     <button mat-icon-button
-            *ngIf="politica?.estado === 'BORRADOR'"
+            *ngIf="isEditable"
             [style.color]="simulationActive ? '#fbbf24' : ''"
             (click)="toggleSimulation()"
             matTooltip="Simulación de tokens (play/pause)">
       <mat-icon>{{ simulationActive ? 'stop_circle' : 'play_circle' }}</mat-icon>
     </button>
 
-    <!-- Botón AI Chat (solo BORRADOR) -->
+    <!-- Botón AI Chat (solo editable) -->
     <button mat-icon-button
-            *ngIf="politica?.estado === 'BORRADOR'"
+            *ngIf="isEditable"
             [style.color]="showAiPanel ? '#a78bfa' : ''"
             (click)="toggleAiPanel()"
             matTooltip="Asistente IA (modifica el diagrama con comandos)">
@@ -137,7 +137,7 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
     </button>
 
     <button mat-icon-button (click)="importBpmn()" matTooltip="Importar .bpmn"
-            *ngIf="politica?.estado === 'BORRADOR'">
+            *ngIf="isEditable">
       <mat-icon>upload_file</mat-icon>
     </button>
     <button mat-icon-button (click)="exportBpmn()" matTooltip="Exportar .bpmn">
@@ -147,7 +147,7 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
       <mat-icon>image</mat-icon>
     </button>
     <button mat-raised-button color="primary"
-            *ngIf="politica?.estado === 'BORRADOR'"
+            *ngIf="isEditable"
             (click)="saveNow()" [disabled]="isSaving" class="bpmn-save-btn">
       <mat-spinner *ngIf="isSaving" diameter="16" style="display:inline-block;margin-right:6px"></mat-spinner>
       <mat-icon *ngIf="!isSaving">save</mat-icon>
@@ -252,7 +252,7 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
 
     <!-- Properties panel (solo BORRADOR) -->
     <div #bpmnProperties class="bpmn-properties"
-         [class.bpmn-properties--hidden]="politica?.estado !== 'BORRADOR'">
+         [class.bpmn-properties--hidden]="!isEditable">
     </div>
   </div>
 
@@ -260,13 +260,13 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
   <div class="bpmn-status-bar">
     <span class="status-item">
       <mat-icon>info</mat-icon>
-      {{ politica?.estado === 'BORRADOR' ? 'Modo edicion' : 'Solo lectura — ' + politica?.estado }}
+      {{ isEditable ? 'Modo edicion' : 'Solo lectura — ' + politica?.estado }}
     </span>
     <span class="status-sep"></span>
     <span class="status-item" *ngIf="lastSaved">
       Guardado: {{ getLastSavedText() }}
     </span>
-    <span class="status-item" *ngIf="isDirty && politica?.estado === 'BORRADOR'">
+    <span class="status-item" *ngIf="isDirty && isEditable">
       <mat-icon style="font-size:14px;color:#f59e0b">circle</mat-icon>
       Cambios sin guardar
     </span>
@@ -665,6 +665,11 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
 
   politicaId: string | null = null;
   politica: Politica | null = null;
+
+  /** BORRADOR e INACTIVA son los dos estados donde se puede editar el diagrama */
+  get isEditable(): boolean {
+    return this.politica?.estado === 'BORRADOR' || this.politica?.estado === 'INACTIVA';
+  }
   isLoading = false;
   isSaving = false;
   isDirty = false;
@@ -767,9 +772,9 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();    // fuerza renderizado del *ngIf
         setTimeout(() => this.initBpmnModeler(), 50);
 
-        // Solo BORRADOR → el editor colaborativo aplica
+        // BORRADOR e INACTIVA → el editor colaborativo aplica
         // join() actualiza collaborators$ internamente; el componente recibe vía suscripción
-        if (p.estado === 'BORRADOR') {
+        if (p.estado === 'BORRADOR' || p.estado === 'INACTIVA') {
           this.collaborationService.join(this.politicaId!);
         }
       },
@@ -784,7 +789,7 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
   private initBpmnModeler(): void {
     if (!this.politicaId) return;
 
-    const isReadOnly = this.politica?.estado !== 'BORRADOR';
+    const isReadOnly = !this.isEditable;
 
     try {
       if (isReadOnly) {
@@ -865,7 +870,7 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
   }
 
   private autoSave(): void {
-    if (!this.politicaId || !this.modeler || this.politica?.estado !== 'BORRADOR') return;
+    if (!this.politicaId || !this.modeler || !this.isEditable) return;
     if (this.isApplyingRemoteUpdate) return;
     this.modeler.saveXML({ format: true }).then(({ xml }: { xml: string }) => {
       this.politicaService.saveBpmn(this.politicaId!, xml, this.localBpmnVersion).subscribe({
@@ -1071,7 +1076,7 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
    * aplica el XML actualizado aunque el WS no haya entregado el broadcast.
    */
   private pollBpmnVersion(): void {
-    if (!this.politicaId || !this.modeler || this.politica?.estado !== 'BORRADOR') return;
+    if (!this.politicaId || !this.modeler || !this.isEditable) return;
     if (this.isDirty || this.isApplyingRemoteUpdate) return;
 
     this.politicaService.getBpmn(this.politicaId).subscribe({
@@ -1179,7 +1184,7 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
 
   // ── Nombre editable inline ─────────────────────────────────
   startEditingName(): void {
-    if (!this.politica || this.politica.estado !== 'BORRADOR') return;
+    if (!this.politica || !this.isEditable) return;
     this.editingName = true;
     this.editingNameValue = this.politica.nombre;
     setTimeout(() => {
@@ -1237,7 +1242,7 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
   onKeyDown(event: KeyboardEvent): void {
     if ((event.ctrlKey || event.metaKey) && event.key === 's') {
       event.preventDefault();
-      if (this.politica?.estado === 'BORRADOR') this.saveNow();
+      if (this.isEditable) this.saveNow();
     }
     if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === 'H') {
       event.preventDefault();
