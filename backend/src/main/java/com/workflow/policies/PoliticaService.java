@@ -36,8 +36,14 @@ public class PoliticaService {
     // Consultas
     // -----------------------------------------------------------------------
 
-    public Page<PoliticaResponse> getAll(String estado, String nombre, int page, int size) {
+    public Page<PoliticaResponse> getAll(String estado, String nombre, String versionPadreId, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "creadoEn"));
+
+        // Filtro por versionPadreId tiene precedencia — retorna versiones hijas de una política
+        if (versionPadreId != null && !versionPadreId.isBlank()) {
+            return politicaRepository.findByVersionPadreId(versionPadreId, pageable)
+                    .map(this::toResponse);
+        }
 
         Politica.EstadoPolitica estadoEnum = parseEstado(estado);
 
@@ -450,6 +456,22 @@ public class PoliticaService {
                 id, savedVersion.getId(), savedVersion.getVersion(), userId);
 
         return toResponse(savedVersion);
+    }
+
+    // -----------------------------------------------------------------------
+    // Desactivar → ACTIVA o BORRADOR → INACTIVA
+    // -----------------------------------------------------------------------
+
+    public PoliticaResponse desactivar(String id) {
+        Politica politica = findOrThrow(id);
+        if (politica.getEstado() == Politica.EstadoPolitica.INACTIVA) {
+            throw new BadRequestException("La política ya está inactiva");
+        }
+        politica.setEstado(Politica.EstadoPolitica.INACTIVA);
+        politica.setActualizadoEn(LocalDateTime.now());
+        Politica saved = politicaRepository.save(politica);
+        log.info("Política desactivada: id={}, por usuario={}", id, getCurrentUserId());
+        return toResponse(saved);
     }
 
     // -----------------------------------------------------------------------

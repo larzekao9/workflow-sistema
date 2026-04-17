@@ -1,7 +1,10 @@
 import json
+import logging
 import anthropic
 from app.schemas.bpmn_schemas import BpmnCommandRequest, BpmnCommandResponse, BpmnOperation
 from app.core.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """Eres un asistente experto en modelado de procesos BPMN 2.0.
 Tu tarea es modificar diagramas BPMN XML según instrucciones en español.
@@ -53,14 +56,34 @@ Devuelve SOLO el JSON con los cambios aplicados al XML."""
         messages=[{"role": "user", "content": user_message}]
     )
 
-    raw = message.content[0].text.strip()
+    # Extraer texto de la respuesta de Claude — protegido ante respuesta vacía o inesperada
+    try:
+        raw = message.content[0].text.strip()
+    except (IndexError, AttributeError) as e:
+        logger.error("Respuesta de Claude sin contenido de texto: %s | content=%s", e, message.content)
+        return BpmnCommandResponse(
+            newBpmnXml=request.bpmnXml,
+            explanation="El asistente no devolvió contenido. Intenta reformular la instrucción.",
+            operations=[],
+            hasChanges=False,
+        )
 
     # Limpiar posible wrapper de código markdown
     if raw.startswith("```"):
         lines = raw.splitlines()
         raw = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
 
-    data = json.loads(raw)
+    # Parsear JSON — protegido ante respuesta no estructurada de Claude
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as e:
+        logger.error("Claude no devolvió JSON válido. Error: %s | raw_response=%.500s", e, raw)
+        return BpmnCommandResponse(
+            newBpmnXml=request.bpmnXml,
+            explanation="El asistente no pudo procesar el comando. Intenta reformular la instrucción.",
+            operations=[],
+            hasChanges=False,
+        )
 
     operations = [
         BpmnOperation(type=op["type"], description=op["description"])
@@ -68,8 +91,8 @@ Devuelve SOLO el JSON con los cambios aplicados al XML."""
     ]
 
     return BpmnCommandResponse(
-        newBpmnXml=data["newBpmnXml"],
-        explanation=data["explanation"],
+        newBpmnXml=data.get("newBpmnXml") or request.bpmnXml,
+        explanation=data.get("explanation", "Cambios aplicados al diagrama."),
         operations=operations,
         hasChanges=data.get("hasChanges", True)
     )

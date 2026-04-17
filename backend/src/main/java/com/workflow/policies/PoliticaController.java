@@ -18,14 +18,15 @@ public class PoliticaController {
 
     private final PoliticaService politicaService;
 
-    // GET /policies?estado=&nombre=&page=0&size=20
+    // GET /policies?estado=&nombre=&versionPadreId=&page=0&size=20
     @GetMapping
     public ResponseEntity<Page<PoliticaResponse>> getAll(
             @RequestParam(required = false) String estado,
             @RequestParam(required = false) String nombre,
+            @RequestParam(required = false) String versionPadreId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
-        return ResponseEntity.ok(politicaService.getAll(estado, nombre, page, size));
+        return ResponseEntity.ok(politicaService.getAll(estado, nombre, versionPadreId, page, size));
     }
 
     // GET /policies/{id}
@@ -74,6 +75,13 @@ public class PoliticaController {
     @PreAuthorize("hasAuthority('PUBLICAR_POLITICA')")
     public ResponseEntity<PoliticaResponse> publish(@PathVariable String id) {
         return ResponseEntity.ok(politicaService.publicar(id));
+    }
+
+    // PUT /policies/{id}/deactivate — desactivar política (cualquier estado → INACTIVA)
+    @PutMapping("/{id}/deactivate")
+    @PreAuthorize("hasAuthority('GESTIONAR_POLITICAS')")
+    public ResponseEntity<PoliticaResponse> deactivate(@PathVariable String id) {
+        return ResponseEntity.ok(politicaService.desactivar(id));
     }
 
     // POST /policies/{id}/version

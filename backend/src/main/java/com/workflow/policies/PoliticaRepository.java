@@ -19,5 +19,7 @@ public interface PoliticaRepository extends MongoRepository<Politica, String> {
 
     List<Politica> findByVersionPadreId(String versionPadreId);
 
+    Page<Politica> findByVersionPadreId(String versionPadreId, Pageable pageable);
+
     long countByEstadoAndNombre(Politica.EstadoPolitica estado, String nombre);
 }
