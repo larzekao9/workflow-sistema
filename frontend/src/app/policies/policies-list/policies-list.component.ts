@@ -5,7 +5,7 @@ import { ReactiveFormsModule, FormControl } from '@angular/forms';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 
 import { MatTableModule, MatTableDataSource } from '@angular/material/table';
-import { MatPaginatorModule, MatPaginator } from '@angular/material/paginator';
+import { MatPaginatorModule, MatPaginator, PageEvent } from '@angular/material/paginator';
 import { MatSortModule, MatSort } from '@angular/material/sort';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -179,7 +179,14 @@ import { CreatePoliticaDialogComponent } from '../create-politica-dialog/create-
             </tr>
           </table>
 
-          <mat-paginator [pageSizeOptions]="[10, 25, 50]" showFirstLastButtons></mat-paginator>
+          <mat-paginator
+            [length]="totalElements"
+            [pageSize]="pageSize"
+            [pageIndex]="currentPage"
+            [pageSizeOptions]="[10, 25, 50]"
+            showFirstLastButtons
+            (page)="onPageChange($event)">
+          </mat-paginator>
         </div>
       </mat-card-content>
     </mat-card>
@@ -215,6 +222,10 @@ export class PoliciesListComponent implements OnInit, AfterViewInit {
   dataSource = new MatTableDataSource<Politica>();
   isLoading = false;
 
+  totalElements = 0;
+  currentPage = 0;
+  pageSize = 10;
+
   searchControl = new FormControl('');
   estadoControl = new FormControl('');
 
@@ -234,27 +245,37 @@ export class PoliciesListComponent implements OnInit, AfterViewInit {
     this.searchControl.valueChanges.pipe(
       debounceTime(400),
       distinctUntilChanged()
-    ).subscribe(() => this.loadPoliticas());
+    ).subscribe(() => {
+      this.currentPage = 0;
+      this.loadPoliticas();
+    });
 
-    this.estadoControl.valueChanges.subscribe(() => this.loadPoliticas());
+    this.estadoControl.valueChanges.subscribe(() => {
+      this.currentPage = 0;
+      this.loadPoliticas();
+    });
   }
 
   ngAfterViewInit(): void {
-    this.dataSource.paginator = this.paginator;
+    // Sort client-side sobre la página actual; paginación manejada por el backend
     this.dataSource.sort = this.sort;
   }
 
   loadPoliticas(): void {
     this.isLoading = true;
-    const filters: { estado?: any; nombre?: string } = {};
-    const estado = this.estadoControl.value;
-    const nombre = this.searchControl.value;
+    const filters: { estado?: EstadoPolitica; nombre?: string; page: number; size: number } = {
+      page: this.currentPage,
+      size: this.pageSize
+    };
+    const estado = this.estadoControl.value as EstadoPolitica | '';
+    const nombre = this.searchControl.value ?? '';
     if (estado) filters.estado = estado;
     if (nombre) filters.nombre = nombre;
 
-    this.politicaService.getAll(filters).subscribe({
-      next: (data) => {
-        this.dataSource.data = data;
+    this.politicaService.getAllPaged(filters).subscribe({
+      next: (res) => {
+        this.dataSource.data = res.content;
+        this.totalElements = res.totalElements;
         this.isLoading = false;
       },
       error: (err) => {
@@ -266,6 +287,12 @@ export class PoliciesListComponent implements OnInit, AfterViewInit {
         );
       }
     });
+  }
+
+  onPageChange(event: PageEvent): void {
+    this.currentPage = event.pageIndex;
+    this.pageSize = event.pageSize;
+    this.loadPoliticas();
   }
 
   getEstadoClass(estado: EstadoPolitica): string {

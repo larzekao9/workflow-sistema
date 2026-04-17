@@ -26,6 +26,20 @@ export class PoliticaService {
     );
   }
 
+  getAllPaged(filters?: { estado?: EstadoPolitica; nombre?: string; page?: number; size?: number }): Observable<{ content: Politica[]; totalElements: number }> {
+    let params = new HttpParams();
+    if (filters?.estado) params = params.set('estado', filters.estado);
+    if (filters?.nombre) params = params.set('nombre', filters.nombre);
+    params = params.set('page', (filters?.page ?? 0).toString());
+    params = params.set('size', (filters?.size ?? 10).toString());
+    return this.http.get<any>(this.url, { params }).pipe(
+      map(res => Array.isArray(res)
+        ? { content: res, totalElements: res.length }
+        : { content: res?.content ?? [], totalElements: res?.totalElements ?? 0 }
+      )
+    );
+  }
+
   getById(id: string): Observable<Politica> {
     return this.http.get<Politica>(`${this.url}/${id}`);
   }
@@ -60,7 +74,7 @@ export class PoliticaService {
   }
 
   deactivate(id: string): Observable<Politica> {
-    return this.http.put<Politica>(`${this.url}/${id}`, { estado: 'INACTIVA' });
+    return this.http.put<Politica>(`${this.url}/${id}/deactivate`, {});
   }
 
   newVersion(id: string): Observable<Politica> {
