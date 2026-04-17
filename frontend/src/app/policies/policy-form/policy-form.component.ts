@@ -50,9 +50,9 @@ import { Politica } from '../../shared/models/politica.model';
     <mat-card *ngIf="!isLoading || !isEditMode">
       <mat-card-content>
 
-        <div *ngIf="isEditMode && politica && politica.estado !== 'BORRADOR'" class="readonly-banner">
+        <div *ngIf="isEditMode && politica && (politica.estado === 'ACTIVA' || politica.estado === 'ARCHIVADA')" class="readonly-banner">
           <mat-icon>lock</mat-icon>
-          Solo en estado BORRADOR se puede editar esta política. Estado actual: <strong>{{ politica.estado }}</strong>
+          Esta política no puede editarse en estado <strong>{{ politica.estado }}</strong>. Solo se pueden editar políticas en BORRADOR o INACTIVA.
         </div>
 
         <form [formGroup]="form" novalidate class="form-layout">
@@ -121,7 +121,7 @@ import { Politica } from '../../shared/models/politica.model';
           mat-raised-button
           color="primary"
           (click)="onSubmit()"
-          [disabled]="isSaving || form.invalid || (isEditMode && politica?.estado !== 'BORRADOR')">
+          [disabled]="isSaving || form.invalid || (isEditMode && (politica?.estado === 'ACTIVA' || politica?.estado === 'ARCHIVADA'))">
           <mat-spinner *ngIf="isSaving" diameter="18" style="display:inline-block; margin-right:6px"></mat-spinner>
           <span>{{ isEditMode ? 'Guardar cambios' : 'Crear política' }}</span>
         </button>
@@ -210,7 +210,7 @@ export class PolicyFormComponent implements OnInit {
             icono: p.metadatos?.icono ?? 'description',
             color: p.metadatos?.color ?? '#1976d2'
           });
-          if (p.estado !== 'BORRADOR') {
+          if (p.estado === 'ACTIVA' || p.estado === 'ARCHIVADA') {
             this.form.disable();
           }
           this.isLoading = false;
@@ -238,7 +238,7 @@ export class PolicyFormComponent implements OnInit {
 
   onSubmit(): void {
     if (this.form.invalid) return;
-    if (this.isEditMode && this.politica?.estado !== 'BORRADOR') return;
+    if (this.isEditMode && (this.politica?.estado === 'ACTIVA' || this.politica?.estado === 'ARCHIVADA')) return;
 
     this.isSaving = true;
     const val = this.form.value;
