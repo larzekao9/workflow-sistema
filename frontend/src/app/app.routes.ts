@@ -81,6 +81,21 @@ export const routes: Routes = [
     loadComponent: () => import('./tramites/tramites.component').then(m => m.TramitesComponent)
   },
   {
+    path: 'tramites/nuevo',
+    canActivate: [authGuard],
+    loadComponent: () => import('./tramites/nuevo-tramite/nuevo-tramite.component').then(m => m.NuevoTramiteComponent)
+  },
+  {
+    path: 'tramites/:id/correccion',
+    canActivate: [authGuard],
+    loadComponent: () => import('./tramites/tramite-correccion/tramite-correccion.component').then(m => m.TramiteCorreccionComponent)
+  },
+  {
+    path: 'tramites/:id',
+    canActivate: [authGuard],
+    loadComponent: () => import('./tramites/tramite-detalle/tramite-detalle.component').then(m => m.TramiteDetalleComponent)
+  },
+  {
     path: '',
     redirectTo: 'dashboard',
     pathMatch: 'full'

@@ -1,6 +1,8 @@
-import { Component, OnInit, Inject } from '@angular/core';
+import { Component, OnInit, OnDestroy, Inject, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
+// @ts-ignore
+import BpmnViewer from 'bpmn-js/lib/NavigatedViewer';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 
 import { MatCardModule } from '@angular/material/card';
@@ -245,26 +247,35 @@ export class AgregarRelacionDialogComponent {
         </mat-card-actions>
       </mat-card>
 
-      <!-- Actividades / Editor de flujo -->
+      <!-- Flujo: BPMN viewer si existe, lista legacy si no -->
       <mat-card class="activities-card">
         <mat-card-header>
           <mat-card-title>
             <mat-icon>account_tree</mat-icon>
             Flujo de Actividades
           </mat-card-title>
-          <mat-card-subtitle>{{ actividades.length }} actividades configuradas</mat-card-subtitle>
+          <mat-card-subtitle *ngIf="!loadingBpmn && !loadingActividades">
+            <ng-container *ngIf="bpmnXml">Diagrama BPMN — v{{ bpmnVersion }}</ng-container>
+            <ng-container *ngIf="!bpmnXml && actividades.length > 0">{{ actividades.length }} actividades configuradas</ng-container>
+            <ng-container *ngIf="!bpmnXml && actividades.length === 0">Sin diagrama configurado</ng-container>
+          </mat-card-subtitle>
         </mat-card-header>
+
         <mat-card-content>
-          <div *ngIf="loadingActividades" class="loading-container">
+
+          <!-- Spinner mientras carga -->
+          <div *ngIf="loadingBpmn || loadingActividades" class="loading-container">
             <mat-spinner diameter="32"></mat-spinner>
           </div>
 
-          <div *ngIf="!loadingActividades && actividades.length === 0" class="empty-activities">
-            <mat-icon class="empty-icon">account_tree</mat-icon>
-            <p>No hay actividades configuradas. Abrí el editor de flujo para comenzar.</p>
+          <!-- BPMN viewer (nueva era: bpmn-js) -->
+          <div *ngIf="!loadingBpmn && bpmnXml"
+               #bpmnPreview
+               class="bpmn-preview-canvas">
           </div>
 
-          <mat-list *ngIf="!loadingActividades && actividades.length > 0">
+          <!-- Lista legacy (políticas con actividades manuales) -->
+          <mat-list *ngIf="!loadingBpmn && !bpmnXml && !loadingActividades && actividades.length > 0">
             <mat-list-item *ngFor="let act of actividades" class="activity-item">
               <mat-icon matListItemIcon [style.color]="getTipoColor(act.tipo)">
                 {{ getTipoIcon(act.tipo) }}
@@ -276,11 +287,19 @@ export class AgregarRelacionDialogComponent {
               </div>
             </mat-list-item>
           </mat-list>
+
+          <!-- Estado vacío -->
+          <div *ngIf="!loadingBpmn && !loadingActividades && !bpmnXml && actividades.length === 0" class="empty-activities">
+            <mat-icon class="empty-icon">account_tree</mat-icon>
+            <p>Sin diagrama configurado. Abrí el editor de flujo para comenzar.</p>
+          </div>
+
         </mat-card-content>
+
         <mat-card-actions>
           <button mat-raised-button color="primary" [routerLink]="['/policies', politica.id, 'flow']">
             <mat-icon>edit_note</mat-icon>
-            Abrir Editor de Flujo
+            {{ (politica.estado === 'BORRADOR' || politica.estado === 'INACTIVA') ? 'Abrir Editor de Flujo' : 'Ver Diagrama' }}
           </button>
         </mat-card-actions>
       </mat-card>
@@ -436,6 +455,17 @@ export class AgregarRelacionDialogComponent {
     }
     .meta-label { font-weight: 500; color: rgba(0,0,0,0.6); min-width: 90px; }
     .actions-row { padding: 8px 16px 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .bpmn-preview-canvas {
+      width: 100%;
+      height: 380px;
+      border: 1px solid rgba(0,0,0,0.12);
+      border-radius: 4px;
+      background: #fafafa;
+      overflow: hidden;
+    }
+    .bpmn-preview-canvas :host ::ng-deep .djs-container svg {
+      border-radius: 4px;
+    }
     .empty-activities, .empty-relations {
       text-align: center;
       padding: 32px;
@@ -540,10 +570,18 @@ export class AgregarRelacionDialogComponent {
     }
   `]
 })
-export class PolicyDetailComponent implements OnInit {
+export class PolicyDetailComponent implements OnInit, OnDestroy {
   politica: Politica | null = null;
   actividades: Actividad[] = [];
   versiones: Politica[] = [];
+
+  // BPMN preview
+  bpmnXml: string | null = null;
+  bpmnVersion: number = 0;
+  loadingBpmn = false;
+  private bpmnViewer: any = null;
+
+  @ViewChild('bpmnPreview') bpmnPreviewRef?: ElementRef<HTMLDivElement>;
 
   // Mejora 1: relaciones
   relaciones: PoliticaRelacionResponse[] = [];
@@ -582,6 +620,7 @@ export class PolicyDetailComponent implements OnInit {
       next: (p) => {
         this.politica = p;
         this.isLoading = false;
+        this.loadBpmn(id);
         this.loadActividades(id);
         this.loadVersiones(p);
         this.loadVersionTree(p);
@@ -595,6 +634,46 @@ export class PolicyDetailComponent implements OnInit {
         this.router.navigate(['/policies']);
       }
     });
+  }
+
+  private loadBpmn(id: string): void {
+    this.loadingBpmn = true;
+    this.politicaService.getBpmn(id).subscribe({
+      next: ({ bpmnXml, bpmnVersion }) => {
+        this.bpmnXml = bpmnXml ?? null;
+        this.bpmnVersion = bpmnVersion ?? 0;
+        this.loadingBpmn = false;
+        // Esperar al siguiente tick para que *ngIf renderice el div
+        setTimeout(() => this.initBpmnPreview(), 80);
+      },
+      error: () => {
+        this.bpmnXml = null;
+        this.loadingBpmn = false;
+      }
+    });
+  }
+
+  private initBpmnPreview(): void {
+    if (!this.bpmnPreviewRef?.nativeElement || !this.bpmnXml) return;
+    if (this.bpmnViewer) {
+      this.bpmnViewer.destroy();
+      this.bpmnViewer = null;
+    }
+    try {
+      this.bpmnViewer = new BpmnViewer({ container: this.bpmnPreviewRef.nativeElement });
+      this.bpmnViewer.importXML(this.bpmnXml).then(() => {
+        this.bpmnViewer.get('canvas').zoom('fit-viewport');
+      }).catch(() => {});
+    } catch (e) {
+      console.error('[PolicyDetail] Error inicializando BPMN preview:', e);
+    }
+  }
+
+  ngOnDestroy(): void {
+    if (this.bpmnViewer) {
+      this.bpmnViewer.destroy();
+      this.bpmnViewer = null;
+    }
   }
 
   private loadActividades(politicaId: string): void {
