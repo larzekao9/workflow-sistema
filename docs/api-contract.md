@@ -263,6 +263,98 @@ DecisionResponse:
 
 ---
 
+## Trámites `[requiere JWT]`
+Sprint 3 — Motor de ejecución. Última actualización: 2026-04-18.
+
+Estados posibles: `INICIADO | EN_PROCESO | COMPLETADO | RECHAZADO | CANCELADO | DEVUELTO | ESCALADO`
+
+### POST /tramites → 201 `TramiteResponse`
+Inicia un nuevo trámite sobre una política ACTIVA. El usuario autenticado queda como `clienteId`.
+Parsea el `bpmnXml` de la política y posiciona el trámite en la primera `UserTask`.
+Request:
+```json
+{ "politicaId": "str (requerido)" }
+```
+Error 400 si la política no existe, no está ACTIVA, o no tiene `bpmnXml`.
+
+### GET /tramites → 200 `Page<TramiteResponse>`
+Lista paginada filtrada automáticamente por rol del usuario autenticado:
+- `ADMINISTRADOR` → todos los trámites
+- `FUNCIONARIO` → trámites donde `etapaActual.responsableRolNombre` coincide con su rol
+- `CLIENTE` (y otros) → solo trámites propios (`clienteId == userId`)
+
+Query params: `page=0`, `size=20`
+
+### GET /tramites/{id} → 200 `TramiteResponse`
+Detalle completo con historial de auditoría.
+Error 404 si no existe.
+
+### POST /tramites/{id}/avanzar → 200 `TramiteResponse`
+Avanza el trámite. Solo disponible en estados no finales (no COMPLETADO, RECHAZADO, CANCELADO).
+Request:
+```json
+{ "accion": "APROBAR|RECHAZAR|DEVOLVER|ESCALAR", "observaciones": "str?", "formularioRespuesta": { ... }? }
+```
+Comportamiento por acción:
+- `APROBAR` → navega al siguiente nodo BPMN. Si llega a EndEvent → estado `COMPLETADO`, `etapaActual = null`. Si hay siguiente UserTask → estado `EN_PROCESO`, actualiza `etapaActual`.
+- `RECHAZAR` → estado `RECHAZADO`. Final.
+- `DEVOLVER` → estado `DEVUELTO`. Cliente debe responder con `POST /tramites/{id}/responder`.
+- `ESCALAR` → estado `ESCALADO`.
+Toda acción genera un `HistorialEntry` con responsable, timestamp y observaciones.
+Error 400 si el trámite ya está en estado final.
+
+### GET /tramites/{id}/formulario-actual → 200 `FormularioActualResponse`
+Retorna el formulario form-js de la etapa activa, si está configurado.
+```json
+{ "formularioId": "str|null", "formJsSchema": { ... }|null }
+```
+
+### POST /tramites/{id}/responder → 200 `TramiteResponse`
+El cliente corrige y reenvía un trámite en estado `DEVUELTO`.
+Solo puede llamarlo el `clienteId` original del trámite.
+Request:
+```json
+{ "observaciones": "str?" }
+```
+Transición: `DEVUELTO → EN_PROCESO` (misma `etapaActual`).
+Error 400 si no está en estado DEVUELTO o si otro usuario intenta responderlo.
+
+---
+
+TramiteResponse:
+```json
+{
+  "id": "str",
+  "politicaId": "str",
+  "politicaNombre": "str",
+  "politicaVersion": 1,
+  "clienteId": "str",
+  "estado": "INICIADO|EN_PROCESO|COMPLETADO|RECHAZADO|CANCELADO|DEVUELTO|ESCALADO",
+  "etapaActual": {
+    "actividadBpmnId": "str",
+    "nombre": "str",
+    "responsableRolNombre": "str",
+    "formularioId": "str|null"
+  },
+  "historial": [
+    {
+      "actividadBpmnId": "str",
+      "actividadNombre": "str",
+      "responsableId": "str",
+      "responsableNombre": "str",
+      "accion": "str",
+      "timestamp": "ISO datetime",
+      "observaciones": "str|null"
+    }
+  ],
+  "creadoEn": "ISO datetime",
+  "actualizadoEn": "ISO datetime",
+  "fechaVencimientoEtapa": "ISO datetime|null"
+}
+```
+
+---
+
 ## AI Service
 Base URL: `http://localhost:8001`
 

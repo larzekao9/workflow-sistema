@@ -1,4 +1,4 @@
-# Estado workflow-sistema — 2026-04-15
+# Estado workflow-sistema — 2026-04-18
 
 ## Stack
 - Backend: Java 21 + Spring Boot 3 + MongoDB → :8080
@@ -17,13 +17,38 @@
 | 2.8 | dmn-js: tablas de decisión CRUD | ✓ |
 | 2.9 | form-js: editor/viewer de formularios | ✓ |
 | 2.10 | Colaboración tiempo real (WebSocket) | ✓ |
+| 3 | Motor de trámites: instanciar, ejecutar, auditar | ✓ |
 | **2.11** | **Chat IA en el editor (NLP → bpmn-js)** | **⏳ PRÓXIMO** |
-| 3 | Motor de trámites: instanciar, ejecutar, auditar | ⏳ |
 | 4 | IA copiloto avanzado + captura por voz | ⏳ |
 | 5 | Analítica de cuellos de botella + portal cliente | ⏳ |
 | 6 | App móvil Flutter | 🔒 |
 
-## Sprint 2.10 ✓ — Completado
+## Sprint 3 ✓ — Motor de Trámites completado (2026-04-18)
+
+**Ciclo probado:** Cliente inicia → estado INICIADO → Funcionario aprueba → COMPLETADO (navega BPMN) | DEVUELTO → Cliente responde → EN_PROCESO
+
+**Backend — paquete `com.workflow.tramites`:**
+- `Tramite.java` — Document MongoDB, enum `EstadoTramite` (INICIADO/EN_PROCESO/COMPLETADO/RECHAZADO/CANCELADO/DEVUELTO/ESCALADO), inner classes `EtapaActual` y `HistorialEntry`
+- `BpmnMotorService.java` — parsea BPMN 2.0 XML con DocumentBuilder (namespace-unaware), soporta prefijos `bpmn:`, `bpmn2:` y sin prefijo. Salta gateways automáticamente. XXE prevention.
+- `TramiteService.java` — filtrado por rol: ADMINISTRADOR=todos, FUNCIONARIO=por responsableRolNombre, CLIENTE=propios
+- `TramiteController.java` — 6 endpoints REST
+
+**Importante — BpmnMotorService:** La etapa dice "Revisión Manual" si el UserTask en el BPMN no tiene atributo `camunda:candidateGroups`. Para que el motor lea el rol correcto, los UserTasks en el editor deben tener ese atributo o texto "ROL:FUNCIONARIO" en `documentation`.
+
+**Frontend — `frontend/src/app/tramites/`:**
+- `tramites.component.ts` — bandeja paginada, chips de color por estado
+- `tramite-detalle/` — detalle + form-js viewer + botones APROBAR/RECHAZAR/DEVOLVER con dialog de observaciones + timeline de historial
+- `nuevo-tramite/` — selector de políticas ACTIVAS + submit
+- `tramite-correccion/` — respuesta a devolución
+
+**Rutas Angular:** `/tramites`, `/tramites/nuevo`, `/tramites/:id`, `/tramites/:id/correccion`
+
+**Dataset de prueba en MongoDB:**
+- 3 políticas ACTIVAS con BPMN: "Solicitud de Compra", "Solicitud de Licencia o Permiso", "Solicitud de Reembolso de Gastos"
+- IDs: 69e2fa3f5872c06a054b3d8f, 69e2fa3f5872c06a054b3d90, 69e2fa3f5872c06a054b3d91
+- 8 usuarios de prueba (password: `Test1234!`) + admin (password: `admin123`)
+
+## Sprint 2.10 ✓ — Colaboración tiempo real
 Backend: WebSocket STOMP + `CollaborationService` (in-memory presence), `/ws` endpoint, `WebSocketAuthInterceptor` (solo GESTIONAR_POLITICAS), endpoints `join/leave/collaborators`, optimistic lock en `saveBpmn` (bpmnVersion, 409 en conflicto).
 Frontend: `CollaborationService` (@stomp/stompjs + SockJS), avatares en top-bar del editor, `localBpmnVersion` en autoSave y saveNow, snackbar de conflicto con reload.
 
@@ -33,7 +58,7 @@ Frontend: `CollaborationService` (@stomp/stompjs + SockJS), avatares en top-bar 
 - Frontend traduce operaciones a `bpmn-js` API calls (`modeling.createShape`, `modeling.connect`, etc.)
 - Vista previa de cambios antes de aplicar + undo nativo bpmn-js
 
-## Marco conceptual (skill: experto-workflows.md)
+## Marco conceptual
 El sistema NO es un editor de diagramas. Es una plataforma de control operativo con tres capas:
 - **Modelado** (Admin): diseña, versiona y publica políticas
 - **Ejecución** (Funcionario): opera tareas en su bandeja, aprueba/rechaza/devuelve
@@ -44,36 +69,7 @@ Reglas que nunca se rompen:
 - Toda acción importante genera trazabilidad (quién, qué, cuándo, por qué)
 - Políticas deben validarse (bpmnlint ya activo) antes de publicarse
 - Funcionarios ven solo lo de su rol; clientes no ven lógica interna
-
-## Sprint 3 — Motor de Trámites (el más crítico)
-El corazón del sistema: convierte una política publicada en un proceso ejecutable real.
-
-**Ciclo completo:** Cliente inicia → Funcionario valida (puede DEVOLVER al cliente) → Cliente corrige y reenvía → Funcionario aprueba → siguiente etapa → … → COMPLETADO
-
-**Modelo `tramites` (MongoDB):**
-```
-{ politicaId, politicaVersion, clienteId,
-  estado: INICIADO|EN_PROCESO|COMPLETADO|RECHAZADO|CANCELADO|DEVUELTO,
-  etapaActual: { actividadBpmnId, nombre, responsableRolId, formularioId },
-  historial: [{ actividadId, responsableId, accion, timestamp, observaciones, evidencias[] }],
-  fechaVencimientoEtapa }   ← para escalamiento por SLA
-```
-
-**Backend endpoints:**
-- `POST /tramites` → parsea bpmnXml de la política, instancia en primera UserTask
-- `GET /tramites` → filtrado por rol (funcionario: asignados a su rol; cliente: propios)
-- `GET /tramites/{id}` → detalle con historial completo
-- `POST /tramites/{id}/avanzar` → `{ accion: APROBAR|RECHAZAR|DEVOLVER|ESCALAR, observaciones, formularioRespuesta }` → motor evalúa gateways + DMN → genera auditoría
-- `GET /tramites/{id}/formulario-actual` → devuelve formJsSchema de la etapa activa
-- `POST /tramites/{id}/adjuntos` → evidencias
-- `POST /tramites/{id}/responder` → cliente reenvía tras devolución
-
-**Frontend:**
-- `TramitesListComponent` (bandeja) → funcionario ve asignados; cliente ve los propios
-- `TramiteEjecucionComponent` → form-js viewer + Aprobar/Rechazar/Devolver + adjuntos
-- `NuevoTramiteComponent` → cliente inicia solicitud desde política publicada
-- `TramiteCorreccionComponent` → cliente responde observación y reenvía
-- Toda acción genera entrada en historial (auditoría obligatoria)
+- INACTIVA permite editar metadatos Y diagrama BPMN (igual que BORRADOR)
 
 ## Decisiones técnicas fijas
 - bpmn-js = editor; campo `bpmnXml` en documento `Politica`
@@ -85,14 +81,21 @@ El corazón del sistema: convierte una política publicada en un proceso ejecuta
 - DTOs siempre — nunca exponer documentos MongoDB directos
 - URLs del backend exclusivamente en `environment.ts`
 - Lógica IA solo en `services/`, nunca en `routers/`
+- User tiene campo `rolId` (String, single role) — no lista de roles
 
 ## Endpoints consolidados (:8080)
 - `POST /auth/login` → `{ token }`
 - `GET|PUT /policies/{id}/bpmn` → `{ bpmnXml }`
 - `GET|POST|PUT|DELETE /policies`
+- `POST /policies/{id}/publish` → publica política BORRADOR → ACTIVA
 - `GET|POST|PUT|DELETE /forms` + `GET /forms/{id}`
 - `GET|POST|PUT|DELETE /decisions` + `GET|PUT /decisions/{id}/dmn`
-- `GET|POST /tramites` + `GET /tramites/{id}` + `POST /tramites/{id}/avanzar`
+- `POST /tramites` → `{ politicaId }`
+- `GET /tramites` → paginado, filtrado por rol automáticamente
+- `GET /tramites/{id}`
+- `POST /tramites/{id}/avanzar` → `{ accion: APROBAR|RECHAZAR|DEVOLVER|ESCALAR, observaciones }`
+- `GET /tramites/{id}/formulario-actual`
+- `POST /tramites/{id}/responder` → `{ observaciones }`
 
 ## Referencia detallada
-Plan completo de sprints 2.10–6: `docs/sprint-planning.md`
+Plan completo de sprints: `docs/sprint-planning.md`
