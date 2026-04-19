@@ -23,7 +23,8 @@ import java.util.List;
 @CompoundIndexes({
     @CompoundIndex(name = "idx_cliente_estado", def = "{'cliente_id': 1, 'estado': 1}"),
     @CompoundIndex(name = "idx_etapa_rol", def = "{'etapa_actual.responsable_rol_nombre': 1, 'estado': 1}"),
-    @CompoundIndex(name = "idx_politica_estado", def = "{'politica_id': 1, 'estado': 1}")
+    @CompoundIndex(name = "idx_politica_estado", def = "{'politica_id': 1, 'estado': 1}"),
+    @CompoundIndex(name = "idx_etapa_rol_asignado", def = "{'etapa_actual.responsable_rol_nombre': 1, 'asignado_a_id': 1}")
 })
 public class Tramite {
 
@@ -100,6 +101,13 @@ public class Tramite {
     @Field("cliente_id")
     @Indexed
     private String clienteId;
+
+    @Field("asignado_a_id")
+    @Indexed
+    private String asignadoAId;
+
+    @Field("asignado_a_nombre")
+    private String asignadoANombre;
 
     @Field("estado")
     @Builder.Default

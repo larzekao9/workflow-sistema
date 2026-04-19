@@ -66,3 +66,13 @@ export const ESTADO_CONFIG: Record<EstadoTramite, EstadoConfig> = {
 export function estadoConfig(estado: EstadoTramite): EstadoConfig {
   return ESTADO_CONFIG[estado] ?? { label: estado, cssClass: 'chip-cancelado' };
 }
+
+export interface TramiteStats {
+  total: number;
+  iniciados: number;
+  enProceso: number;
+  completados: number;
+  rechazados: number;
+  devueltos: number;
+  escalados: number;
+}

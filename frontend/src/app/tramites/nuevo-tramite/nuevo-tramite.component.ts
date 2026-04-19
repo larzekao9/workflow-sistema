@@ -70,8 +70,8 @@ import { Politica } from '../../shared/models/politica.model';
                 <mat-option
                   *ngFor="let p of politicas"
                   [value]="p.id">
-                  {{ p.nombre }}
-                  <span class="option-version">(v{{ p.version }})</span>
+                  {{ p.nombre }} (v{{ p.version }})
+                  <span *ngIf="p.departamento" class="option-dept"> — Depto: {{ p.departamento }}</span>
                 </mat-option>
               </mat-select>
               <mat-hint>Solo se muestran políticas en estado ACTIVA.</mat-hint>
@@ -79,6 +79,23 @@ import { Politica } from '../../shared/models/politica.model';
                 Seleccioná una política para continuar.
               </mat-error>
             </mat-form-field>
+
+            <!-- Card descripción de política seleccionada -->
+            <div class="politica-preview" *ngIf="politicaSeleccionada" role="region" aria-label="Detalles de la política seleccionada">
+              <mat-icon aria-hidden="true">info_outline</mat-icon>
+              <div class="politica-preview-body">
+                <strong>{{ politicaSeleccionada.nombre }}</strong>
+                <p *ngIf="politicaSeleccionada.descripcion">{{ politicaSeleccionada.descripcion }}</p>
+                <span *ngIf="politicaSeleccionada.departamento" class="politica-depto">
+                  Departamento: {{ politicaSeleccionada.departamento }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Texto explicativo -->
+            <p class="inicio-aviso">
+              Una vez iniciado el trámite, será asignado al equipo responsable para su revisión.
+            </p>
 
             <div class="nuevo-actions">
               <button
@@ -139,10 +156,61 @@ import { Politica } from '../../shared/models/politica.model';
       width: 100%;
     }
 
-    .option-version {
-      font-size: 0.8rem;
+    .option-dept {
+      font-size: 0.78rem;
       color: #9e9e9e;
-      margin-left: 4px;
+    }
+
+    /* Política preview */
+    .politica-preview {
+      display: flex;
+      gap: 12px;
+      padding: 14px 16px;
+      background: #e8f5e9;
+      border: 1px solid #a5d6a7;
+      border-radius: 8px;
+      margin-bottom: 16px;
+    }
+
+    .politica-preview mat-icon {
+      color: #2e7d32;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .politica-preview-body {
+      flex: 1;
+    }
+
+    .politica-preview-body strong {
+      font-size: 0.95rem;
+      color: #1b5e20;
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .politica-preview-body p {
+      margin: 0 0 6px;
+      font-size: 0.875rem;
+      color: #424242;
+      line-height: 1.5;
+    }
+
+    .politica-depto {
+      font-size: 0.78rem;
+      color: #4caf50;
+      font-weight: 500;
+    }
+
+    /* Texto informativo */
+    .inicio-aviso {
+      margin: 0 0 8px;
+      font-size: 0.82rem;
+      color: #5f6368;
+      padding: 8px 12px;
+      background: #f8f9fa;
+      border-radius: 6px;
+      border-left: 3px solid #9e9e9e;
     }
 
     .nuevo-actions {
@@ -173,6 +241,12 @@ export class NuevoTramiteComponent implements OnInit {
   politicas: Politica[] = [];
   isLoadingPoliticas = true;
   isSubmitting = false;
+
+  get politicaSeleccionada(): Politica | null {
+    const id = this.form.get('politicaId')?.value as string | null;
+    if (!id) return null;
+    return this.politicas.find(p => p.id === id) ?? null;
+  }
 
   private readonly destroyRef = inject(DestroyRef);
 

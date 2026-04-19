@@ -248,7 +248,53 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
     </div>
 
     <!-- Canvas bpmn-js -->
-    <div #bpmnCanvas class="bpmn-canvas"></div>
+    <div class="bpmn-canvas-wrap">
+      <div #bpmnCanvas class="bpmn-canvas"></div>
+
+      <!-- Panel propiedades UserTask -->
+      <div class="task-props-panel" *ngIf="selectedElement && isEditable" role="complementary" aria-label="Propiedades del paso seleccionado">
+        <div class="task-props-header">
+          <mat-icon aria-hidden="true">tune</mat-icon>
+          <span>Propiedades del Paso</span>
+          <button mat-icon-button
+                  (click)="selectedElement = null"
+                  class="task-props-close"
+                  aria-label="Cerrar panel de propiedades">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+
+        <mat-form-field appearance="outline" class="task-props-field">
+          <mat-label>Nombre del paso</mat-label>
+          <input matInput
+                 [(ngModel)]="selectedTaskName"
+                 placeholder="Ej: Validar solicitud"
+                 aria-label="Nombre del paso" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="task-props-field">
+          <mat-label>Rol responsable</mat-label>
+          <mat-select [(ngModel)]="selectedTaskRol" aria-label="Rol responsable">
+            <mat-option value="FUNCIONARIO">Funcionario</mat-option>
+            <mat-option value="ADMINISTRADOR">Administrador</mat-option>
+            <mat-option value="CLIENTE">Cliente</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="task-props-field">
+          <mat-label>Formulario asociado</mat-label>
+          <mat-select [(ngModel)]="selectedTaskFormId" aria-label="Formulario asociado">
+            <mat-option value="">Sin formulario</mat-option>
+            <mat-option *ngFor="let f of formulariosList" [value]="f.id">{{ f.nombre }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <button mat-raised-button color="primary" (click)="applyTaskProperties()" class="task-props-apply-btn">
+          <mat-icon>check</mat-icon>
+          Aplicar
+        </button>
+      </div>
+    </div>
 
     <!-- Properties panel (solo BORRADOR) -->
     <div #bpmnProperties class="bpmn-properties"
@@ -364,6 +410,7 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
     }
     .bpmn-canvas {
       flex: 1;
+      width: 100%;
       height: 100%;
       background: #f0f4f8;
     }
@@ -654,6 +701,83 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
       min-width: 60px !important;
     }
     .ai-send-btn:disabled { opacity: 0.4 !important; }
+
+    /* ── UserTask Properties Panel ──────────────────────────── */
+    .bpmn-canvas-wrap {
+      flex: 1;
+      height: 100%;
+      position: relative;
+      overflow: hidden;
+    }
+    /* El canvas ocupa todo el wrap */
+    .bpmn-canvas-wrap .bpmn-canvas {
+      width: 100%;
+      height: 100%;
+      background: #f0f4f8;
+    }
+    .task-props-panel {
+      position: absolute;
+      right: 16px;
+      top: 16px;
+      width: 280px;
+      background: #ffffff;
+      border-radius: 8px;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18), 0 1px 4px rgba(0, 0, 0, 0.08);
+      padding: 0;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .task-props-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 12px 12px 16px;
+      background: #f8fafc;
+      border-bottom: 1px solid #e2e8f0;
+      font-size: 13px;
+      font-weight: 600;
+      color: #1e293b;
+    }
+    .task-props-header mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+      color: #2563eb;
+      flex-shrink: 0;
+    }
+    .task-props-header span { flex: 1; }
+    .task-props-close {
+      width: 32px !important;
+      height: 32px !important;
+      line-height: 32px !important;
+      color: #64748b !important;
+      flex-shrink: 0;
+    }
+    .task-props-close:hover { color: #1e293b !important; }
+    .task-props-close mat-icon { font-size: 18px; width: 18px; height: 18px; }
+    .task-props-field {
+      width: 100%;
+      padding: 0 16px;
+    }
+    /* Primer campo: margen superior */
+    .task-props-field:first-of-type { margin-top: 16px; }
+    .task-props-apply-btn {
+      width: calc(100% - 32px) !important;
+      margin: 4px 16px 16px !important;
+      font-size: 13px !important;
+      height: 36px !important;
+    }
+    /* Responsive: en pantallas pequeñas el panel se adapta */
+    @media (max-width: 768px) {
+      .task-props-panel {
+        right: 8px;
+        top: 8px;
+        width: calc(100vw - 16px);
+        max-width: 280px;
+      }
+    }
   `]
 })
 export class FlowEditorComponent implements OnInit, OnDestroy {
@@ -683,6 +807,13 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
   collaborators: Collaborator[] = [];
   localBpmnVersion = 0;
   private isApplyingRemoteUpdate = false;
+
+  // --- Panel propiedades UserTask ---
+  selectedElement: object | null = null;
+  selectedTaskName = '';
+  selectedTaskRol = 'FUNCIONARIO';
+  selectedTaskFormId = '';
+  formulariosList: { id: string; nombre: string }[] = [];
 
   // AI Chat panel
   showAiPanel = false;
@@ -720,6 +851,7 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
     }
     this.currentUserEmail = this.authService.getCurrentUser()?.email ?? null;
     this.loadData();
+    this.loadFormularios();
 
     // Auto-save 2 segundos despues del ultimo cambio
     this.autoSave$.pipe(
@@ -836,6 +968,33 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
         // Lint: recoger errores de validación
         this.modeler.on('linting.completed', (e: any) => {
           this.lintErrors = e.issues ? (Object.values(e.issues) as any[]).flat() : [];
+          this.cdr.detectChanges();
+        });
+
+        // Seleccion de elemento: mostrar panel propiedades para UserTask/Task
+        this.modeler.on('selection.changed', (e: any) => {
+          const elements: any[] = e.newSelection ?? [];
+          if (elements.length === 1) {
+            const el = elements[0];
+            const elType: string = el.type ?? '';
+            if (elType.toLowerCase().includes('task')) {
+              this.selectedElement = el;
+              this.selectedTaskName = (el.businessObject?.name as string) ?? '';
+              // Leer documentation actual
+              const docs: any[] = el.businessObject?.documentation ?? [];
+              const docText: string = docs.length > 0 ? ((docs[0].text ?? docs[0].$body ?? '') as string) : '';
+              // Extraer rol: patrón "ROL:FUNCIONARIO"
+              const rolMatch = docText.match(/ROL:(\w+)/i);
+              this.selectedTaskRol = rolMatch ? rolMatch[1].toUpperCase() : 'FUNCIONARIO';
+              // Extraer formulario: patrón "FORM:{id}"
+              const formMatch = docText.match(/FORM:([a-zA-Z0-9]+)/i);
+              this.selectedTaskFormId = formMatch ? formMatch[1] : '';
+              this.cdr.detectChanges();
+              return;
+            }
+          }
+          // Deseleccion o elemento no es task
+          this.selectedElement = null;
           this.cdr.detectChanges();
         });
       }
@@ -1055,6 +1214,7 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
     this.chatMessages[messageIndex] = { ...msg, pendingXml: undefined };
     this.cdr.detectChanges();
 
+    this.selectedElement = null; // XML cambia completo, referencias previas son inválidas
     this.modeler.importXML(newXml).then(() => {
       this.modeler.get('canvas').zoom('fit-viewport');
       this.isDirty = true;
@@ -1098,6 +1258,7 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
       // Sin cambios locales: aplicar el XML remoto silenciosamente
       // Activar flag para que commandStack.changed no dispare auto-save
       this.isApplyingRemoteUpdate = true;
+      this.selectedElement = null; // El XML cambia, la referencia al elemento ya no es válida
       this.modeler.importXML(update.bpmnXml).then(() => {
         this.localBpmnVersion = update.bpmnVersion;
         this.isDirty = false;
@@ -1180,6 +1341,44 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
         this.messagesContainer.nativeElement.scrollTop = this.messagesContainer.nativeElement.scrollHeight;
       }
     }, 50);
+  }
+
+  // ── UserTask Properties Panel ──────────────────────────────
+
+  private loadFormularios(): void {
+    this.formularioService.getAll({ page: 0, size: 100 }).pipe(
+      takeUntil(this.destroy$)
+    ).subscribe({
+      next: (page) => {
+        this.formulariosList = page.content.map(f => ({ id: f.id, nombre: f.nombre }));
+      },
+      error: (err) => {
+        console.error('Error cargando formularios para el panel:', err);
+      }
+    });
+  }
+
+  applyTaskProperties(): void {
+    if (!this.selectedElement || !this.modeler || !this.isEditable) return;
+
+    const modeling = this.modeler.get('modeling');
+    const moddle = this.modeler.get('moddle');
+
+    // Construir texto de documentation con rol y formulario opcional
+    let docText = `ROL:${this.selectedTaskRol}`;
+    if (this.selectedTaskFormId) {
+      docText += `\nFORM:${this.selectedTaskFormId}`;
+    }
+
+    const docElement = moddle.create('bpmn:Documentation', { text: docText });
+
+    modeling.updateProperties(this.selectedElement, {
+      name: this.selectedTaskName,
+      documentation: [docElement]
+    });
+
+    this.isDirty = true;
+    this.snackBar.open('Propiedades actualizadas', '', { duration: 1500 });
   }
 
   // ── Nombre editable inline ─────────────────────────────────
