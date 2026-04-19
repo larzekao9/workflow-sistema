@@ -15,6 +15,8 @@ public class TramiteResponse {
     private String politicaNombre;
     private Integer politicaVersion;
     private String clienteId;
+    private String asignadoAId;
+    private String asignadoANombre;
     private String estado;
     private EtapaActualDTO etapaActual;
     private List<HistorialEntryDTO> historial;
@@ -54,6 +56,8 @@ public class TramiteResponse {
                 .politicaNombre(tramite.getPoliticaNombre())
                 .politicaVersion(tramite.getPoliticaVersion())
                 .clienteId(tramite.getClienteId())
+                .asignadoAId(tramite.getAsignadoAId())
+                .asignadoANombre(tramite.getAsignadoANombre())
                 .estado(tramite.getEstado().name())
                 .etapaActual(mapEtapa(tramite.getEtapaActual()))
                 .historial(mapHistorial(tramite.getHistorial()))

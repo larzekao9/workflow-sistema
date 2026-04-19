@@ -6,13 +6,11 @@ import {
   ViewChild,
   ViewEncapsulation,
   ChangeDetectorRef,
-  DestroyRef,
-  inject,
   Inject
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { ReactiveFormsModule, FormBuilder, FormControl, Validators } from '@angular/forms';
 import { Subject, takeUntil } from 'rxjs';
 
 import { MatButtonModule } from '@angular/material/button';
@@ -26,6 +24,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatCardModule } from '@angular/material/card';
+import { MatListModule } from '@angular/material/list';
 
 import { Form } from '@bpmn-io/form-js-viewer';
 
@@ -38,12 +37,13 @@ import {
   AvanzarTramiteRequest,
   FormularioActualResponse,
   EstadoConfig,
+  HistorialEntry,
   estadoConfig as getEstadoConfig
 } from '../../shared/models/tramite.model';
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Dialog de confirmación / observaciones inline
-// ──────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Dialog de confirmación / observaciones
+// ─────────────────────────────────────────────────────────────────────────────
 interface AccionDialogData {
   title: string;
   accion: AccionTramite;
@@ -72,7 +72,9 @@ import { Component as NgComponent } from '@angular/core';
     <h2 mat-dialog-title>{{ data.title }}</h2>
     <mat-dialog-content>
       <p style="margin:0 0 16px;color:#5f6368">
-        {{ data.requireObs ? 'Ingresá las observaciones para continuar.' : '¿Confirmás esta acción?' }}
+        {{ data.requireObs
+            ? 'Ingresá las observaciones para continuar.'
+            : '¿Confirmás esta acción? No se puede deshacer.' }}
       </p>
       <mat-form-field *ngIf="data.requireObs" appearance="outline" style="width:100%">
         <mat-label>Observaciones</mat-label>
@@ -82,15 +84,18 @@ import { Component as NgComponent } from '@angular/core';
           rows="4"
           [required]="data.requireObs"
           placeholder="Describí el motivo o instrucciones..."
-          aria-label="Observaciones">
+          aria-label="Observaciones para la acción">
         </textarea>
         <mat-error *ngIf="obsControl.hasError('required')">
           Las observaciones son obligatorias para esta acción.
         </mat-error>
+        <mat-error *ngIf="obsControl.hasError('minlength')">
+          Ingresá al menos 5 caracteres.
+        </mat-error>
       </mat-form-field>
     </mat-dialog-content>
     <mat-dialog-actions align="end" style="gap:8px;padding:16px">
-      <button mat-stroked-button (click)="cancel()" aria-label="Cancelar">Cancelar</button>
+      <button mat-stroked-button (click)="cancel()" aria-label="Cancelar acción">Cancelar</button>
       <button
         mat-raised-button
         [color]="data.accion === 'RECHAZAR' ? 'warn' : 'primary'"
@@ -103,7 +108,10 @@ import { Component as NgComponent } from '@angular/core';
   `
 })
 export class AccionDialogComponent {
-  obsControl = this.fb.control('', this.data.requireObs ? [Validators.required, Validators.minLength(5)] : []);
+  obsControl = this.fb.control(
+    '',
+    this.data.requireObs ? [Validators.required, Validators.minLength(5)] : []
+  );
 
   constructor(
     private readonly fb: FormBuilder,
@@ -121,9 +129,9 @@ export class AccionDialogComponent {
   }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // Componente principal
-// ──────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 @Component({
   selector: 'app-tramite-detalle',
   standalone: true,
@@ -131,6 +139,7 @@ export class AccionDialogComponent {
   imports: [
     CommonModule,
     RouterModule,
+    ReactiveFormsModule,
     MatButtonModule,
     MatIconModule,
     MatChipsModule,
@@ -141,11 +150,13 @@ export class AccionDialogComponent {
     MatInputModule,
     MatDividerModule,
     MatTooltipModule,
-    MatCardModule
+    MatCardModule,
+    MatListModule
   ],
   template: `
     <div class="detalle-shell">
-      <!-- Top bar -->
+
+      <!-- Top bar de navegación -->
       <div class="detalle-top-bar">
         <button
           mat-icon-button
@@ -154,13 +165,22 @@ export class AccionDialogComponent {
           aria-label="Volver a la lista de trámites">
           <mat-icon>arrow_back</mat-icon>
         </button>
-        <h1 class="detalle-titulo">
-          {{ tramite?.politicaNombre || 'Trámite' }}
-        </h1>
+        <div class="top-bar-info">
+          <h1 class="detalle-titulo">
+            {{ tramite?.politicaNombre || 'Trámite' }}
+            <span *ngIf="tramite" class="version-tag">v{{ tramite.politicaVersion }}</span>
+          </h1>
+          <p class="top-bar-meta" *ngIf="tramite?.clienteNombre">
+            <mat-icon aria-hidden="true" style="font-size:14px;width:14px;height:14px">person</mat-icon>
+            Iniciado por: <strong>{{ tramite!.clienteNombre }}</strong>
+            &nbsp;·&nbsp;
+            {{ tramite!.creadoEn | date:'dd/MM/yyyy' }}
+          </p>
+        </div>
         <span
           *ngIf="tramite"
           class="estado-chip {{ estadoConfig(tramite.estado).cssClass }}"
-          [attr.aria-label]="'Estado: ' + estadoConfig(tramite.estado).label">
+          [attr.aria-label]="'Estado actual: ' + estadoConfig(tramite.estado).label">
           {{ estadoConfig(tramite.estado).label }}
         </span>
       </div>
@@ -171,35 +191,203 @@ export class AccionDialogComponent {
       </div>
 
       <ng-container *ngIf="!isLoading && tramite">
-        <!-- Info general -->
-        <mat-card class="info-card">
-          <mat-card-content>
-            <div class="info-grid">
-              <div class="info-item">
-                <span class="info-label">Política</span>
-                <span class="info-value">{{ tramite.politicaNombre }} (v{{ tramite.politicaVersion }})</span>
-              </div>
-              <div class="info-item" *ngIf="tramite.etapaActual">
-                <span class="info-label">Etapa actual</span>
-                <span class="info-value">{{ tramite.etapaActual.nombre }}</span>
-              </div>
-              <div class="info-item" *ngIf="tramite.etapaActual?.responsableRolNombre">
-                <span class="info-label">Responsable</span>
-                <span class="info-value">{{ tramite.etapaActual!.responsableRolNombre }}</span>
-              </div>
-              <div class="info-item">
-                <span class="info-label">Creado</span>
-                <span class="info-value">{{ tramite.creadoEn | date:'dd/MM/yyyy HH:mm' }}</span>
-              </div>
-              <div class="info-item" *ngIf="tramite.fechaVencimientoEtapa">
-                <span class="info-label">Vence etapa</span>
-                <span class="info-value vence">{{ tramite.fechaVencimientoEtapa | date:'dd/MM/yyyy HH:mm' }}</span>
-              </div>
-            </div>
-          </mat-card-content>
-        </mat-card>
 
-        <!-- Formulario activo (form-js viewer) -->
+        <!-- ────────── PANEL CLIENTE ────────── -->
+        <ng-container *ngIf="esCliente()">
+
+          <!-- Estado actual (solo lectura) -->
+          <mat-card class="info-card">
+            <mat-card-header>
+              <mat-icon mat-card-avatar aria-hidden="true">info</mat-icon>
+              <mat-card-title>Estado de tu trámite</mat-card-title>
+            </mat-card-header>
+            <mat-card-content>
+              <div class="info-grid">
+                <div class="info-item" *ngIf="tramite.etapaActual">
+                  <span class="info-label">Etapa actual</span>
+                  <span class="info-value">{{ tramite.etapaActual.nombre }}</span>
+                </div>
+                <div class="info-item" *ngIf="tramite.etapaActual?.responsableRolNombre">
+                  <span class="info-label">Equipo responsable</span>
+                  <span class="info-value">{{ tramite.etapaActual!.responsableRolNombre }}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">Fecha de inicio</span>
+                  <span class="info-value">{{ tramite.creadoEn | date:'dd/MM/yyyy HH:mm' }}</span>
+                </div>
+                <div class="info-item" *ngIf="tramite.fechaVencimientoEtapa">
+                  <span class="info-label">Vencimiento de etapa</span>
+                  <span class="info-value vence">{{ tramite.fechaVencimientoEtapa | date:'dd/MM/yyyy HH:mm' }}</span>
+                </div>
+              </div>
+            </mat-card-content>
+          </mat-card>
+
+          <!-- Banner DEVUELTO -->
+          <div
+            *ngIf="tramite.estado === 'DEVUELTO'"
+            class="status-banner banner-warn"
+            role="alert">
+            <div class="banner-icon">
+              <mat-icon aria-hidden="true">reply</mat-icon>
+            </div>
+            <div class="banner-body">
+              <strong>Tu trámite fue devuelto</strong>
+              <p *ngIf="ultimaDevolucion?.observaciones">
+                <em>Motivo:</em> {{ ultimaDevolucion!.observaciones }}
+              </p>
+              <p *ngIf="!ultimaDevolucion?.observaciones">
+                El responsable solicitó correcciones.
+              </p>
+              <button
+                mat-raised-button
+                color="warn"
+                [routerLink]="['/tramites', tramite.id, 'correccion']"
+                aria-label="Responder ahora la corrección del trámite">
+                <mat-icon>reply</mat-icon>
+                Responder Ahora
+              </button>
+            </div>
+          </div>
+
+          <!-- Banner COMPLETADO -->
+          <div
+            *ngIf="tramite.estado === 'COMPLETADO'"
+            class="status-banner banner-success"
+            role="status">
+            <mat-icon aria-hidden="true">check_circle</mat-icon>
+            <span>Tu trámite fue completado correctamente.</span>
+          </div>
+
+          <!-- Banner RECHAZADO -->
+          <div
+            *ngIf="tramite.estado === 'RECHAZADO'"
+            class="status-banner banner-error"
+            role="alert">
+            <mat-icon aria-hidden="true">cancel</mat-icon>
+            <div>
+              <strong>Tu trámite fue rechazado</strong>
+              <p *ngIf="ultimoRechazo?.observaciones">{{ ultimoRechazo!.observaciones }}</p>
+            </div>
+          </div>
+
+        </ng-container>
+
+        <!-- ────────── PANEL FUNCIONARIO / ADMIN ────────── -->
+        <ng-container *ngIf="!esCliente()">
+
+          <!-- Info card -->
+          <mat-card class="info-card">
+            <mat-card-content>
+              <div class="info-grid">
+                <div class="info-item">
+                  <span class="info-label">Política</span>
+                  <span class="info-value">{{ tramite.politicaNombre }} (v{{ tramite.politicaVersion }})</span>
+                </div>
+                <div class="info-item" *ngIf="tramite.etapaActual">
+                  <span class="info-label">Etapa actual</span>
+                  <span class="info-value">{{ tramite.etapaActual.nombre }}</span>
+                </div>
+                <div class="info-item" *ngIf="tramite.etapaActual?.responsableRolNombre">
+                  <span class="info-label">Responsable</span>
+                  <span class="info-value">{{ tramite.etapaActual!.responsableRolNombre }}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-label">Creado</span>
+                  <span class="info-value">{{ tramite.creadoEn | date:'dd/MM/yyyy HH:mm' }}</span>
+                </div>
+                <div class="info-item" *ngIf="tramite.fechaVencimientoEtapa">
+                  <span class="info-label">Vence etapa</span>
+                  <span class="info-value vence">{{ tramite.fechaVencimientoEtapa | date:'dd/MM/yyyy HH:mm' }}</span>
+                </div>
+              </div>
+            </mat-card-content>
+          </mat-card>
+
+          <!-- Panel de decisión (trámites activos) -->
+          <mat-card *ngIf="puedeAccionar()" class="decision-card">
+            <mat-card-header>
+              <mat-icon mat-card-avatar aria-hidden="true">gavel</mat-icon>
+              <mat-card-title>Tomar decisión</mat-card-title>
+              <mat-card-subtitle>Seleccioná una acción para avanzar el trámite</mat-card-subtitle>
+            </mat-card-header>
+            <mat-card-content>
+              <!-- Observaciones inline -->
+              <mat-form-field appearance="outline" class="obs-field">
+                <mat-label>Observaciones</mat-label>
+                <textarea
+                  matInput
+                  [formControl]="obsInlineControl"
+                  rows="3"
+                  placeholder="Opcional para Aprobar/Escalar. Obligatorio para Rechazar/Devolver."
+                  aria-label="Observaciones para la decisión">
+                </textarea>
+                <mat-hint align="end">
+                  {{ obsInlineControl.value?.length || 0 }} / 500
+                </mat-hint>
+              </mat-form-field>
+
+              <!-- Botones de acción -->
+              <div class="decision-actions">
+                <button
+                  mat-raised-button
+                  color="primary"
+                  (click)="ejecutarAccionInline('APROBAR')"
+                  [disabled]="isActuando"
+                  aria-label="Aprobar trámite">
+                  <mat-icon>check_circle</mat-icon>
+                  Aprobar
+                </button>
+                <button
+                  mat-raised-button
+                  color="accent"
+                  (click)="ejecutarAccionInline('DEVOLVER')"
+                  [disabled]="isActuando || !obsInlineControl.value?.trim()"
+                  aria-label="Devolver trámite al solicitante"
+                  matTooltip="Requerido: observaciones">
+                  <mat-icon>reply</mat-icon>
+                  Devolver
+                </button>
+                <button
+                  mat-raised-button
+                  color="warn"
+                  (click)="ejecutarAccionInline('RECHAZAR')"
+                  [disabled]="isActuando || !obsInlineControl.value?.trim()"
+                  aria-label="Rechazar trámite"
+                  matTooltip="Requerido: observaciones">
+                  <mat-icon>cancel</mat-icon>
+                  Rechazar
+                </button>
+                <button
+                  mat-stroked-button
+                  (click)="ejecutarAccionInline('ESCALAR')"
+                  [disabled]="isActuando"
+                  aria-label="Escalar trámite">
+                  <mat-icon>escalator_warning</mat-icon>
+                  Escalar
+                </button>
+                <mat-spinner
+                  *ngIf="isActuando"
+                  diameter="24"
+                  aria-label="Procesando acción">
+                </mat-spinner>
+              </div>
+            </mat-card-content>
+          </mat-card>
+
+          <!-- Badge estado final -->
+          <div
+            *ngIf="!puedeAccionar()"
+            class="estado-final-block"
+            [class]="'estado-final-block--' + tramite.estado.toLowerCase()"
+            role="status">
+            <mat-icon aria-hidden="true">{{ iconoEstadoFinal() }}</mat-icon>
+            <span>Este trámite está en estado <strong>{{ estadoConfig(tramite.estado).label }}</strong> y no requiere más acciones.</span>
+          </div>
+
+        </ng-container>
+
+        <!-- ────────── Formulario form-js (todos los roles) ────────── -->
         <mat-card *ngIf="hasFormulario" class="formulario-card">
           <mat-card-header>
             <mat-card-title>
@@ -215,79 +403,63 @@ export class AccionDialogComponent {
           </mat-card-content>
         </mat-card>
 
-        <!-- Botones de acción para funcionarios/administradores -->
-        <div *ngIf="puedeAccionar()" class="acciones-bar">
-          <button
-            mat-raised-button
-            color="primary"
-            (click)="ejecutarAccion('APROBAR')"
-            [disabled]="isActuando"
-            aria-label="Aprobar trámite">
-            <mat-icon>check_circle</mat-icon>
-            Aprobar
-          </button>
-          <button
-            mat-raised-button
-            color="accent"
-            (click)="ejecutarAccion('DEVOLVER')"
-            [disabled]="isActuando"
-            aria-label="Devolver trámite al solicitante">
-            <mat-icon>reply</mat-icon>
-            Devolver
-          </button>
-          <button
-            mat-raised-button
-            color="warn"
-            (click)="ejecutarAccion('RECHAZAR')"
-            [disabled]="isActuando"
-            aria-label="Rechazar trámite">
-            <mat-icon>cancel</mat-icon>
-            Rechazar
-          </button>
-          <mat-spinner *ngIf="isActuando" diameter="24" aria-label="Procesando acción"></mat-spinner>
-        </div>
-
-        <!-- Historial -->
+        <!-- ────────── HISTORIAL (todos los roles) ────────── -->
         <mat-card class="historial-card">
           <mat-card-header>
             <mat-card-title>
               <mat-icon aria-hidden="true">history</mat-icon>
-              Historial
+              Historial del trámite
             </mat-card-title>
           </mat-card-header>
           <mat-card-content>
             <div *ngIf="tramite.historial.length === 0" class="historial-empty">
-              <span>Sin movimientos registrados aún.</span>
+              Sin movimientos registrados aún.
             </div>
-            <ol class="historial-list" *ngIf="tramite.historial.length > 0">
+            <ol
+              class="historial-list"
+              *ngIf="tramite.historial.length > 0"
+              aria-label="Historial de acciones del trámite">
               <li
-                *ngFor="let entry of tramite.historial; let last = last"
+                *ngFor="let entry of historialOrdenado; let last = last"
                 class="historial-entry"
                 [class.historial-entry--last]="last">
-                <div class="historial-dot"></div>
+
+                <!-- Icono por acción -->
+                <div
+                  class="historial-icon historial-icon--{{ entry.accion.toLowerCase() }}"
+                  [attr.aria-label]="'Acción: ' + entry.accion">
+                  <mat-icon aria-hidden="true">{{ iconoAccion(entry.accion) }}</mat-icon>
+                </div>
+
+                <!-- Contenido -->
                 <div class="historial-content">
                   <div class="historial-header">
-                    <span class="historial-accion accion-{{ entry.accion.toLowerCase() }}">
-                      {{ entry.accion }}
+                    <span
+                      class="historial-accion accion-{{ entry.accion.toLowerCase() }}"
+                      [attr.aria-label]="entry.accion">
+                      {{ formatAccion(entry.accion) }}
                     </span>
                     <span class="historial-quien" *ngIf="entry.responsableNombre">
-                      — {{ entry.responsableNombre }}
+                      &mdash; {{ entry.responsableNombre }}
                     </span>
-                    <span class="historial-fecha">
+                    <time
+                      class="historial-fecha"
+                      [attr.datetime]="entry.timestamp">
                       {{ entry.timestamp | date:'dd/MM/yyyy HH:mm' }}
-                    </span>
+                    </time>
                   </div>
                   <div class="historial-etapa" *ngIf="entry.actividadNombre">
                     Etapa: {{ entry.actividadNombre }}
                   </div>
-                  <div class="historial-obs" *ngIf="entry.observaciones">
+                  <blockquote class="historial-obs" *ngIf="entry.observaciones">
                     {{ entry.observaciones }}
-                  </div>
+                  </blockquote>
                 </div>
               </li>
             </ol>
           </mat-card-content>
         </mat-card>
+
       </ng-container>
     </div>
   `,
@@ -296,27 +468,49 @@ export class AccionDialogComponent {
       display: flex;
       flex-direction: column;
       gap: 20px;
-      max-width: 900px;
+      max-width: 960px;
     }
 
     /* Top bar */
     .detalle-top-bar {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 12px;
       flex-wrap: wrap;
     }
 
-    .detalle-titulo {
-      margin: 0;
-      font-size: 1.4rem;
-      font-weight: 600;
-      color: #1a237e;
+    .top-bar-info {
       flex: 1;
       min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+    }
+
+    .detalle-titulo {
+      margin: 0 0 2px;
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #1a237e;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .version-tag {
+      font-size: 0.85rem;
+      font-weight: 500;
+      background: #e3f2fd;
+      color: #0d47a1;
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+
+    .top-bar-meta {
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.82rem;
+      color: #757575;
     }
 
     /* Loading */
@@ -334,6 +528,7 @@ export class AccionDialogComponent {
       font-size: 0.78rem;
       font-weight: 600;
       white-space: nowrap;
+      flex-shrink: 0;
     }
 
     .chip-iniciado   { background: #e0e0e0; color: #424242; }
@@ -345,6 +540,12 @@ export class AccionDialogComponent {
     .chip-escalado   { background: #f3e5f5; color: #6a1b9a; }
 
     /* Info card */
+    .info-card mat-card-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
     .info-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -375,6 +576,125 @@ export class AccionDialogComponent {
       font-weight: 500;
     }
 
+    /* Status banners */
+    .status-banner {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      padding: 16px 20px;
+      border-radius: 8px;
+    }
+
+    .status-banner mat-icon:first-child {
+      font-size: 28px;
+      width: 28px;
+      height: 28px;
+      flex-shrink: 0;
+    }
+
+    .banner-warn {
+      background: #fff3e0;
+      border: 1px solid #ffb74d;
+    }
+
+    .banner-warn mat-icon { color: #e65100; }
+
+    .banner-warn .banner-body button {
+      margin-top: 12px;
+    }
+
+    .banner-warn .banner-body p {
+      margin: 6px 0 0;
+      font-size: 0.9rem;
+      color: #5d4037;
+    }
+
+    .banner-success {
+      background: #e8f5e9;
+      border: 1px solid #a5d6a7;
+      color: #1b5e20;
+      align-items: center;
+    }
+
+    .banner-success mat-icon { color: #2e7d32; }
+
+    .banner-error {
+      background: #ffebee;
+      border: 1px solid #ef9a9a;
+      color: #b71c1c;
+    }
+
+    .banner-error mat-icon { color: #c62828; }
+
+    .banner-error p {
+      margin: 6px 0 0;
+      font-size: 0.9rem;
+    }
+
+    .banner-icon {
+      flex-shrink: 0;
+    }
+
+    .banner-body {
+      flex: 1;
+    }
+
+    /* Decision card */
+    .decision-card {
+      border: 2px solid #1565c0;
+      border-radius: 8px;
+    }
+
+    .decision-card mat-card-title {
+      color: #1565c0;
+    }
+
+    .obs-field {
+      width: 100%;
+      margin-bottom: 16px;
+    }
+
+    .decision-actions {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 600px) {
+      .decision-actions {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .decision-actions button {
+        width: 100%;
+      }
+    }
+
+    /* Estado final block */
+    .estado-final-block {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 18px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      background: #fafafa;
+      border: 1px solid #e0e0e0;
+      color: #424242;
+    }
+
+    .estado-final-block mat-icon {
+      font-size: 22px;
+      width: 22px;
+      height: 22px;
+    }
+
+    .estado-final-block--completado { background: #e8f5e9; border-color: #a5d6a7; color: #1b5e20; }
+    .estado-final-block--rechazado  { background: #ffebee; border-color: #ef9a9a; color: #b71c1c; }
+    .estado-final-block--cancelado  { background: #fafafa; border-color: #e0e0e0; color: #616161; }
+
     /* Formulario */
     .formulario-card mat-card-title {
       display: flex;
@@ -389,30 +709,10 @@ export class AccionDialogComponent {
       padding: 32px;
     }
 
-    .formjs-canvas {
-      min-height: 200px;
-    }
-
-    .formjs-canvas.hidden {
-      display: none;
-    }
-
+    .formjs-canvas { min-height: 200px; }
+    .formjs-canvas.hidden { display: none; }
     .formjs-canvas .fjs-container,
-    .formjs-canvas .fjs-form {
-      height: 100% !important;
-    }
-
-    /* Acciones */
-    .acciones-bar {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      flex-wrap: wrap;
-      padding: 16px;
-      background: #f8f9fa;
-      border-radius: 8px;
-      border: 1px solid rgba(0, 0, 0, 0.08);
-    }
+    .formjs-canvas .fjs-form { height: 100% !important; }
 
     /* Historial */
     .historial-card mat-card-title {
@@ -434,36 +734,55 @@ export class AccionDialogComponent {
       padding: 0;
       display: flex;
       flex-direction: column;
-      gap: 0;
     }
 
     .historial-entry {
       display: flex;
       gap: 16px;
-      position: relative;
       padding-bottom: 20px;
+      position: relative;
     }
 
     .historial-entry--last {
       padding-bottom: 0;
     }
 
-    .historial-dot {
-      width: 12px;
-      height: 12px;
+    /* Iconos por acción */
+    .historial-icon {
+      width: 36px;
+      height: 36px;
       border-radius: 50%;
-      background: #1565c0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       flex-shrink: 0;
-      margin-top: 4px;
       position: relative;
       z-index: 1;
     }
 
-    .historial-entry:not(.historial-entry--last) .historial-dot::after {
+    .historial-icon mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+    }
+
+    .historial-icon--aprobar   { background: #e8f5e9; color: #1b5e20; }
+    .historial-icon--rechazar  { background: #ffebee; color: #b71c1c; }
+    .historial-icon--devolver  { background: #fff3e0; color: #e65100; }
+    .historial-icon--escalar   { background: #f3e5f5; color: #6a1b9a; }
+    .historial-icon--iniciar,
+    .historial-icon--iniciado  { background: #e3f2fd; color: #0d47a1; }
+    .historial-icon--responder,
+    .historial-icon--respondido { background: #e1f5fe; color: #01579b; }
+    .historial-icon--default   { background: #f5f5f5; color: #757575; }
+
+    /* Línea vertical entre entradas */
+    .historial-entry:not(.historial-entry--last) .historial-icon::after {
       content: '';
       position: absolute;
-      top: 12px;
-      left: 5px;
+      top: 36px;
+      left: 50%;
+      transform: translateX(-50%);
       width: 2px;
       bottom: -20px;
       background: #e0e0e0;
@@ -472,6 +791,7 @@ export class AccionDialogComponent {
     .historial-content {
       flex: 1;
       min-width: 0;
+      padding-top: 6px;
     }
 
     .historial-header {
@@ -489,11 +809,14 @@ export class AccionDialogComponent {
       letter-spacing: 0.04em;
     }
 
-    .accion-aprobar  { color: #1b5e20; }
-    .accion-rechazar { color: #b71c1c; }
-    .accion-devolver { color: #e65100; }
-    .accion-escalar  { color: #6a1b9a; }
-    .accion-iniciado { color: #0d47a1; }
+    .accion-aprobar   { color: #1b5e20; }
+    .accion-rechazar  { color: #b71c1c; }
+    .accion-devolver  { color: #e65100; }
+    .accion-escalar   { color: #6a1b9a; }
+    .accion-iniciar,
+    .accion-iniciado  { color: #0d47a1; }
+    .accion-responder,
+    .accion-respondido { color: #01579b; }
 
     .historial-quien {
       font-size: 0.85rem;
@@ -504,6 +827,7 @@ export class AccionDialogComponent {
       font-size: 0.75rem;
       color: #9e9e9e;
       margin-left: auto;
+      white-space: nowrap;
     }
 
     .historial-etapa {
@@ -513,23 +837,13 @@ export class AccionDialogComponent {
     }
 
     .historial-obs {
+      margin: 0;
+      padding: 8px 12px;
       font-size: 0.875rem;
       color: #424242;
       background: #f5f5f5;
       border-left: 3px solid #1565c0;
-      padding: 8px 12px;
       border-radius: 0 4px 4px 0;
-    }
-
-    @media (max-width: 600px) {
-      .acciones-bar {
-        flex-direction: column;
-        align-items: stretch;
-      }
-
-      .acciones-bar button {
-        width: 100%;
-      }
     }
   `]
 })
@@ -542,6 +856,8 @@ export class TramiteDetalleComponent implements OnInit, OnDestroy {
   hasFormulario = false;
   isLoadingFormulario = false;
 
+  obsInlineControl = new FormControl('');
+
   private viewer: Form | null = null;
   private readonly destroy$ = new Subject<void>();
 
@@ -551,7 +867,6 @@ export class TramiteDetalleComponent implements OnInit, OnDestroy {
     private readonly tramiteService: TramiteService,
     private readonly authService: AuthService,
     private readonly snackBar: MatSnackBar,
-    private readonly dialog: MatDialog,
     private readonly cdr: ChangeDetectorRef
   ) {}
 
@@ -574,37 +889,118 @@ export class TramiteDetalleComponent implements OnInit, OnDestroy {
     return getEstadoConfig(estado);
   }
 
+  esCliente(): boolean {
+    const rol = (this.authService.getCurrentUser()?.rolNombre ?? 'CLIENTE').toUpperCase();
+    return !rol.includes('ADMIN') && !rol.includes('FUNCION');
+  }
+
   puedeAccionar(): boolean {
     if (!this.tramite) return false;
     const estado = this.tramite.estado;
     if (estado !== 'INICIADO' && estado !== 'EN_PROCESO') return false;
-    const user = this.authService.getCurrentUser();
-    if (!user) return false;
-    const rolNombre = (user.rolNombre ?? '').toUpperCase();
-    return rolNombre.includes('FUNCIONARIO') || rolNombre.includes('ADMINISTRADOR') || rolNombre.includes('ADMIN');
+    return !this.esCliente();
   }
 
-  ejecutarAccion(accion: AccionTramite): void {
+  get historialOrdenado(): HistorialEntry[] {
+    if (!this.tramite) return [];
+    return [...this.tramite.historial].reverse();
+  }
+
+  get ultimaDevolucion(): HistorialEntry | null {
+    if (!this.tramite) return null;
+    const devoluciones = this.tramite.historial.filter(h => h.accion === 'DEVOLVER');
+    return devoluciones.length > 0 ? devoluciones[devoluciones.length - 1] : null;
+  }
+
+  get ultimoRechazo(): HistorialEntry | null {
+    if (!this.tramite) return null;
+    const rechazos = this.tramite.historial.filter(h => h.accion === 'RECHAZAR');
+    return rechazos.length > 0 ? rechazos[rechazos.length - 1] : null;
+  }
+
+  iconoAccion(accion: string): string {
+    const map: Record<string, string> = {
+      APROBAR:    'check_circle',
+      RECHAZAR:   'cancel',
+      DEVOLVER:   'reply',
+      ESCALAR:    'escalator_warning',
+      INICIAR:    'play_arrow',
+      INICIADO:   'play_arrow',
+      RESPONDER:  'chat',
+      RESPONDIDO: 'chat'
+    };
+    return map[accion.toUpperCase()] ?? 'circle';
+  }
+
+  formatAccion(accion: string): string {
+    const map: Record<string, string> = {
+      APROBAR:    'Aprobado',
+      RECHAZAR:   'Rechazado',
+      DEVOLVER:   'Devuelto',
+      ESCALAR:    'Escalado',
+      INICIAR:    'Iniciado',
+      INICIADO:   'Iniciado',
+      RESPONDER:  'Respondido',
+      RESPONDIDO: 'Respondido'
+    };
+    return map[accion.toUpperCase()] ?? accion;
+  }
+
+  iconoEstadoFinal(): string {
+    if (!this.tramite) return 'info';
+    const map: Record<string, string> = {
+      COMPLETADO: 'check_circle',
+      RECHAZADO:  'cancel',
+      CANCELADO:  'block'
+    };
+    return map[this.tramite.estado] ?? 'info';
+  }
+
+  ejecutarAccionInline(accion: AccionTramite): void {
     if (!this.tramite) return;
 
+    const obs = this.obsInlineControl.value?.trim() ?? '';
     const requireObs = accion === 'DEVOLVER' || accion === 'RECHAZAR';
-    const titles: Record<AccionTramite, string> = {
-      APROBAR:  'Aprobar trámite',
-      RECHAZAR: 'Rechazar trámite',
-      DEVOLVER: 'Devolver al solicitante',
-      ESCALAR:  'Escalar trámite'
+
+    if (requireObs && !obs) {
+      this.snackBar.open('Las observaciones son requeridas para esta acción.', 'Cerrar', { duration: 3000 });
+      return;
+    }
+
+    this.isActuando = true;
+    const req: AvanzarTramiteRequest = {
+      accion,
+      observaciones: obs || undefined
     };
 
-    const ref = this.dialog.open(AccionDialogComponent, {
-      data: { title: titles[accion], accion, requireObs } satisfies AccionDialogData,
-      width: '440px',
-      disableClose: false
-    });
-
-    ref.afterClosed().pipe(takeUntil(this.destroy$)).subscribe((result: AccionDialogResult | undefined) => {
-      if (!result?.confirmed || !this.tramite) return;
-      this.enviarAccion(this.tramite.id, accion, result.observaciones);
-    });
+    this.tramiteService.avanzar(this.tramite.id, req)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (updated) => {
+          this.tramite = updated;
+          this.isActuando = false;
+          this.obsInlineControl.reset();
+          this.destroyViewer();
+          this.hasFormulario = false;
+          const labels: Record<AccionTramite, string> = {
+            APROBAR:  'Trámite aprobado correctamente',
+            RECHAZAR: 'Trámite rechazado',
+            DEVOLVER: 'Trámite devuelto al solicitante',
+            ESCALAR:  'Trámite escalado'
+          };
+          this.snackBar.open(labels[accion], 'Cerrar', { duration: 3000 });
+          this.cdr.detectChanges();
+        },
+        error: (err: { error?: { message?: string } }) => {
+          this.isActuando = false;
+          console.error('[TramiteDetalle] Error en acción:', err);
+          this.snackBar.open(
+            err?.error?.message || 'Error al procesar la acción',
+            'Cerrar',
+            { duration: 4000 }
+          );
+        }
+      });
   }
 
   private cargarTramite(id: string): void {
@@ -667,29 +1063,5 @@ export class TramiteDetalleComponent implements OnInit, OnDestroy {
       this.viewer.destroy();
       this.viewer = null;
     }
-  }
-
-  private enviarAccion(id: string, accion: AccionTramite, observaciones?: string): void {
-    this.isActuando = true;
-    const req: AvanzarTramiteRequest = { accion, observaciones };
-    this.tramiteService.avanzar(id, req).pipe(takeUntil(this.destroy$)).subscribe({
-      next: (updated) => {
-        this.tramite = updated;
-        this.isActuando = false;
-        this.destroyViewer();
-        this.hasFormulario = false;
-        this.snackBar.open('Acción aplicada correctamente', 'Cerrar', { duration: 3000 });
-        this.cdr.detectChanges();
-      },
-      error: (err: { error?: { message?: string } }) => {
-        this.isActuando = false;
-        console.error('[TramiteDetalle] Error en acción:', err);
-        this.snackBar.open(
-          err?.error?.message || 'Error al procesar la acción',
-          'Cerrar',
-          { duration: 4000 }
-        );
-      }
-    });
   }
 }

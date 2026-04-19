@@ -122,6 +122,54 @@ public class BpmnMotorService {
     }
 
     /**
+     * Extrae el ID de formulario desde el texto de documentation del task.
+     * Espera patrón "FORM:{id}" en el texto, o bien el atributo camunda:formKey.
+     */
+    public String extractFormIdFromTask(String bpmnXml, String taskId) {
+        if (bpmnXml == null || bpmnXml.isBlank() || taskId == null) {
+            return null;
+        }
+        try {
+            Document doc = parseXml(bpmnXml);
+            for (String tag : List.of("userTask", "bpmn:userTask", "bpmn2:userTask",
+                    "task", "bpmn:task", "bpmn2:task")) {
+                NodeList nodes = doc.getElementsByTagName(tag);
+                for (int i = 0; i < nodes.getLength(); i++) {
+                    Element el = (Element) nodes.item(i);
+                    if (taskId.equals(el.getAttribute("id"))) {
+                        return extractFormId(el);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[BpmnMotor] Error extrayendo formId de task {}: {}", taskId, e.getMessage());
+        }
+        return null;
+    }
+
+    private String extractFormId(Element taskElement) {
+        // Intentar atributo camunda:formKey / flowable:formKey / activiti:formKey
+        for (String attr : List.of("camunda:formKey", "flowable:formKey", "activiti:formKey")) {
+            String val = taskElement.getAttribute(attr);
+            if (val != null && !val.isBlank()) return val.trim();
+        }
+        // Intentar documentation con patrón FORM:xxx
+        for (String docTag : List.of("documentation", "bpmn:documentation", "bpmn2:documentation")) {
+            NodeList docs = taskElement.getElementsByTagName(docTag);
+            if (docs.getLength() > 0) {
+                String text = docs.item(0).getTextContent();
+                if (text != null) {
+                    java.util.regex.Matcher m = java.util.regex.Pattern
+                            .compile("FORM:([a-zA-Z0-9]+)", java.util.regex.Pattern.CASE_INSENSITIVE)
+                            .matcher(text);
+                    if (m.find()) return m.group(1);
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
      * Extrae el nombre del rol responsable de la UserTask desde el atributo
      * camunda:candidateGroups, camunda:assignee, o el campo documentation.
      * Devuelve "FUNCIONARIO" si no se encuentra nada.

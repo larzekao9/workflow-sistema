@@ -52,8 +52,9 @@ public class TramiteService {
         // 2. Obtiene la primera UserTask del proceso
         BpmnMotorService.BpmnTask primeraTask = bpmnMotorService.getFirstUserTask(politica.getBpmnXml());
 
-        // 3. Extrae el rol responsable de esa tarea
+        // 3. Extrae el rol responsable y el formulario de esa tarea
         String rolNombre = bpmnMotorService.extractRolFromTask(politica.getBpmnXml(), primeraTask.id());
+        String formularioId = bpmnMotorService.extractFormIdFromTask(politica.getBpmnXml(), primeraTask.id());
 
         // 4. Obtiene el nombre del cliente
         String clienteNombre = resolverNombreUsuario(clienteId);
@@ -75,7 +76,7 @@ public class TramiteService {
                 .actividadBpmnId(primeraTask.id())
                 .nombre(primeraTask.name())
                 .responsableRolNombre(rolNombre)
-                .formularioId(null) // se puede asociar luego vía formulario
+                .formularioId(formularioId)
                 .build();
 
         Tramite tramite = Tramite.builder()
@@ -98,10 +99,10 @@ public class TramiteService {
     }
 
     // -----------------------------------------------------------------------
-    // Listar trámites (filtrado por rol del usuario)
+    // Listar trámites (filtrado por rol del usuario, con filtro opcional por estado)
     // -----------------------------------------------------------------------
 
-    public Page<TramiteResponse> getTramites(String userId, int page, int size) {
+    public Page<TramiteResponse> getTramites(String userId, String estado, int page, int size) {
         Pageable pageable = PageRequest.of(page, size, Sort.by("creado_en").descending());
 
         User usuario = userRepository.findById(userId)
@@ -109,23 +110,97 @@ public class TramiteService {
 
         String rolNombre = resolverRolNombre(usuario);
 
-        log.debug("[TramiteService] getTramites userId={} rolNombre={}", userId, rolNombre);
+        log.debug("[TramiteService] getTramites userId={} rolNombre={} estado={}", userId, rolNombre, estado);
+
+        Tramite.EstadoTramite estadoEnum = parsearEstado(estado);
 
         if (rolNombre.contains("ADMINISTRADOR")) {
-            // Admin ve todos los trámites
+            if (estadoEnum != null) {
+                return tramiteRepository.findByEstado(estadoEnum, pageable)
+                        .map(TramiteResponse::fromDocument);
+            }
             return tramiteRepository.findAll(pageable)
                     .map(TramiteResponse::fromDocument);
         }
 
         if (rolNombre.contains("FUNCIONARIO")) {
-            // Funcionario ve trámites asignados a su rol en la etapa actual
-            return tramiteRepository.findByEtapaActual_ResponsableRolNombre(rolNombre, pageable)
-                    .map(TramiteResponse::fromDocument);
+            // Asignados a este funcionario + no asignados de su rol (bandeja compartida)
+            Page<Tramite> asignados = tramiteRepository
+                    .findByEtapaActual_ResponsableRolNombreAndAsignadoAId(rolNombre, userId, pageable);
+            Page<Tramite> sinAsignar = tramiteRepository
+                    .findByEtapaActual_ResponsableRolNombreAndAsignadoAIdIsNull(rolNombre, pageable);
+
+            java.util.List<TramiteResponse> combined = new java.util.ArrayList<>();
+            asignados.getContent().forEach(t -> combined.add(TramiteResponse.fromDocument(t)));
+            sinAsignar.getContent().forEach(t -> {
+                if (combined.stream().noneMatch(r -> r.getId().equals(t.getId()))) {
+                    combined.add(TramiteResponse.fromDocument(t));
+                }
+            });
+            long total = asignados.getTotalElements() + sinAsignar.getTotalElements();
+            return new org.springframework.data.domain.PageImpl<>(combined, pageable, total);
         }
 
         // Cliente (y cualquier otro rol) ve solo sus trámites propios
+        if (estadoEnum != null) {
+            return tramiteRepository.findByClienteIdAndEstado(userId, estadoEnum, pageable)
+                    .map(TramiteResponse::fromDocument);
+        }
         return tramiteRepository.findByClienteId(userId, pageable)
                 .map(TramiteResponse::fromDocument);
+    }
+
+    // -----------------------------------------------------------------------
+    // Stats de trámites (conteos por estado según scope del usuario)
+    // -----------------------------------------------------------------------
+
+    public TramiteStatsResponse getTramiteStats(String userId) {
+        User usuario = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado: " + userId));
+
+        String rolNombre = resolverRolNombre(usuario);
+
+        log.debug("[TramiteService] getTramiteStats userId={} rolNombre={}", userId, rolNombre);
+
+        if (rolNombre.contains("ADMINISTRADOR")) {
+            return TramiteStatsResponse.builder()
+                    .total(tramiteRepository.count())
+                    .iniciados(tramiteRepository.countByEstado(Tramite.EstadoTramite.INICIADO))
+                    .enProceso(tramiteRepository.countByEstado(Tramite.EstadoTramite.EN_PROCESO))
+                    .completados(tramiteRepository.countByEstado(Tramite.EstadoTramite.COMPLETADO))
+                    .rechazados(tramiteRepository.countByEstado(Tramite.EstadoTramite.RECHAZADO))
+                    .devueltos(tramiteRepository.countByEstado(Tramite.EstadoTramite.DEVUELTO))
+                    .escalados(tramiteRepository.countByEstado(Tramite.EstadoTramite.ESCALADO))
+                    .cancelados(tramiteRepository.countByEstado(Tramite.EstadoTramite.CANCELADO))
+                    .build();
+        }
+
+        if (rolNombre.contains("FUNCIONARIO")) {
+            long total = tramiteRepository.countByEtapaActual_ResponsableRolNombre(rolNombre);
+            return TramiteStatsResponse.builder()
+                    .total(total)
+                    .iniciados(tramiteRepository.countByEtapaActual_ResponsableRolNombreAndEstado(rolNombre, Tramite.EstadoTramite.INICIADO))
+                    .enProceso(tramiteRepository.countByEtapaActual_ResponsableRolNombreAndEstado(rolNombre, Tramite.EstadoTramite.EN_PROCESO))
+                    .completados(tramiteRepository.countByEtapaActual_ResponsableRolNombreAndEstado(rolNombre, Tramite.EstadoTramite.COMPLETADO))
+                    .rechazados(tramiteRepository.countByEtapaActual_ResponsableRolNombreAndEstado(rolNombre, Tramite.EstadoTramite.RECHAZADO))
+                    .devueltos(tramiteRepository.countByEtapaActual_ResponsableRolNombreAndEstado(rolNombre, Tramite.EstadoTramite.DEVUELTO))
+                    .escalados(tramiteRepository.countByEtapaActual_ResponsableRolNombreAndEstado(rolNombre, Tramite.EstadoTramite.ESCALADO))
+                    .cancelados(tramiteRepository.countByEtapaActual_ResponsableRolNombreAndEstado(rolNombre, Tramite.EstadoTramite.CANCELADO))
+                    .build();
+        }
+
+        // Cliente: solo sus propios trámites
+        long total = tramiteRepository.countByClienteId(userId);
+        return TramiteStatsResponse.builder()
+                .total(total)
+                .iniciados(tramiteRepository.countByClienteIdAndEstado(userId, Tramite.EstadoTramite.INICIADO))
+                .enProceso(tramiteRepository.countByClienteIdAndEstado(userId, Tramite.EstadoTramite.EN_PROCESO))
+                .completados(tramiteRepository.countByClienteIdAndEstado(userId, Tramite.EstadoTramite.COMPLETADO))
+                .rechazados(tramiteRepository.countByClienteIdAndEstado(userId, Tramite.EstadoTramite.RECHAZADO))
+                .devueltos(tramiteRepository.countByClienteIdAndEstado(userId, Tramite.EstadoTramite.DEVUELTO))
+                .escalados(tramiteRepository.countByClienteIdAndEstado(userId, Tramite.EstadoTramite.ESCALADO))
+                .cancelados(tramiteRepository.countByClienteIdAndEstado(userId, Tramite.EstadoTramite.CANCELADO))
+                .build();
     }
 
     // -----------------------------------------------------------------------
@@ -190,6 +265,35 @@ public class TramiteService {
         }
 
         tramite.setActualizadoEn(ahora);
+        return TramiteResponse.fromDocument(tramiteRepository.save(tramite));
+    }
+
+    // -----------------------------------------------------------------------
+    // Tomar trámite (asignación individual a un funcionario)
+    // -----------------------------------------------------------------------
+
+    public TramiteResponse tomarTramite(String tramiteId, String funcionarioId) {
+        Tramite tramite = tramiteRepository.findById(tramiteId)
+                .orElseThrow(() -> new ResourceNotFoundException("Trámite no encontrado: " + tramiteId));
+
+        if (tramite.getEstado() == Tramite.EstadoTramite.COMPLETADO
+                || tramite.getEstado() == Tramite.EstadoTramite.RECHAZADO
+                || tramite.getEstado() == Tramite.EstadoTramite.CANCELADO) {
+            throw new BadRequestException("No se puede tomar un trámite en estado final: " + tramite.getEstado());
+        }
+
+        String nombre = resolverNombreUsuario(funcionarioId);
+        tramite.setAsignadoAId(funcionarioId);
+        tramite.setAsignadoANombre(nombre);
+        LocalDateTime ahora = LocalDateTime.now();
+        tramite.setActualizadoEn(ahora);
+
+        agregarHistorial(tramite,
+                tramite.getEtapaActual() != null ? tramite.getEtapaActual().getActividadBpmnId() : null,
+                tramite.getEtapaActual() != null ? tramite.getEtapaActual().getNombre() : null,
+                funcionarioId, nombre, "TOMADO", "Trámite tomado por el funcionario", ahora);
+
+        log.info("[TramiteService] Trámite {} tomado por {}", tramiteId, funcionarioId);
         return TramiteResponse.fromDocument(tramiteRepository.save(tramite));
     }
 
@@ -289,11 +393,12 @@ public class TramiteService {
         } else {
             // Avanza a la siguiente etapa
             String nuevoRol = bpmnMotorService.extractRolFromTask(bpmnXml, siguienteTask.id());
+            String nuevoFormularioId = bpmnMotorService.extractFormIdFromTask(bpmnXml, siguienteTask.id());
             Tramite.EtapaActual nuevaEtapa = Tramite.EtapaActual.builder()
                     .actividadBpmnId(siguienteTask.id())
                     .nombre(siguienteTask.name())
                     .responsableRolNombre(nuevoRol)
-                    .formularioId(null)
+                    .formularioId(nuevoFormularioId)
                     .build();
             tramite.setEtapaActual(nuevaEtapa);
             tramite.setEstado(Tramite.EstadoTramite.EN_PROCESO);
@@ -317,6 +422,22 @@ public class TramiteService {
                 .timestamp(timestamp)
                 .observaciones(observaciones)
                 .build());
+    }
+
+    /**
+     * Parsea el estado desde String ignorando mayúsculas/minúsculas.
+     * Retorna null si el valor es nulo, vacío o no corresponde a un valor del enum.
+     */
+    private Tramite.EstadoTramite parsearEstado(String estado) {
+        if (estado == null || estado.isBlank()) {
+            return null;
+        }
+        try {
+            return Tramite.EstadoTramite.valueOf(estado.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            log.warn("[TramiteService] Estado inválido ignorado: '{}'", estado);
+            return null;
+        }
     }
 
     private String resolverNombreUsuario(String userId) {

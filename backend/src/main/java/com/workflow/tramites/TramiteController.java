@@ -38,11 +38,33 @@ public class TramiteController {
 
     @GetMapping
     public ResponseEntity<Page<TramiteResponse>> getTramites(
+            @RequestParam(required = false) String estado,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         String userId = resolverUsuarioActualId();
-        Page<TramiteResponse> tramites = tramiteService.getTramites(userId, page, size);
+        Page<TramiteResponse> tramites = tramiteService.getTramites(userId, estado, page, size);
         return ResponseEntity.ok(tramites);
+    }
+
+    // -----------------------------------------------------------------------
+    // GET /tramites/stats — Conteos por estado según scope del usuario
+    // IMPORTANTE: debe ir ANTES de /{id} para evitar colisión de rutas
+    // -----------------------------------------------------------------------
+
+    @GetMapping("/stats")
+    public ResponseEntity<TramiteStatsResponse> getStats() {
+        String userId = resolverUsuarioActualId();
+        return ResponseEntity.ok(tramiteService.getTramiteStats(userId));
+    }
+
+    // -----------------------------------------------------------------------
+    // POST /tramites/{id}/tomar — Funcionario toma el trámite (asignación individual)
+    // -----------------------------------------------------------------------
+
+    @PostMapping("/{id}/tomar")
+    public ResponseEntity<TramiteResponse> tomarTramite(@PathVariable String id) {
+        String funcionarioId = resolverUsuarioActualId();
+        return ResponseEntity.ok(tramiteService.tomarTramite(id, funcionarioId));
     }
 
     // -----------------------------------------------------------------------

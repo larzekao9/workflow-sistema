@@ -7,7 +7,8 @@ import {
   Tramite,
   CreateTramiteRequest,
   AvanzarTramiteRequest,
-  FormularioActualResponse
+  FormularioActualResponse,
+  TramiteStats
 } from '../models/tramite.model';
 
 @Injectable({ providedIn: 'root' })
@@ -16,11 +17,22 @@ export class TramiteService {
 
   constructor(private readonly http: HttpClient) {}
 
-  getAll(page = 0, size = 10): Observable<{ content: Tramite[]; totalElements: number }> {
-    const params = new HttpParams()
+  getAll(
+    page = 0,
+    size = 10,
+    estado?: string
+  ): Observable<{ content: Tramite[]; totalElements: number }> {
+    let params = new HttpParams()
       .set('page', page.toString())
       .set('size', size.toString());
+    if (estado && estado.trim() !== '') {
+      params = params.set('estado', estado);
+    }
     return this.http.get<{ content: Tramite[]; totalElements: number }>(this.base, { params });
+  }
+
+  getStats(): Observable<TramiteStats> {
+    return this.http.get<TramiteStats>(`${this.base}/stats`);
   }
 
   getById(id: string): Observable<Tramite> {

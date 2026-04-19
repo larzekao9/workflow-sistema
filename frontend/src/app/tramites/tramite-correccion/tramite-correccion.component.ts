@@ -52,22 +52,28 @@ import { Tramite, HistorialEntry } from '../../shared/models/tramite.model';
       </div>
 
       <ng-container *ngIf="!isLoading && tramite">
-        <!-- Observaciones del devuelto -->
-        <mat-card *ngIf="ultimaDevolucion" class="obs-card">
+        <!-- Observaciones del devuelto: prominente con fondo ámbar -->
+        <mat-card *ngIf="ultimaDevolucion" class="obs-card obs-card--devuelto">
           <mat-card-header>
             <mat-card-title>
-              <mat-icon aria-hidden="true">info</mat-icon>
+              <mat-icon aria-hidden="true">warning_amber</mat-icon>
               Motivo de la devolución
             </mat-card-title>
+            <mat-card-subtitle>
+              Leé con atención antes de responder
+            </mat-card-subtitle>
           </mat-card-header>
           <mat-card-content>
             <p class="obs-responsable" *ngIf="ultimaDevolucion.responsableNombre">
               <strong>Por:</strong> {{ ultimaDevolucion.responsableNombre }}
-              — {{ ultimaDevolucion.timestamp | date:'dd/MM/yyyy HH:mm' }}
+              &mdash; {{ ultimaDevolucion.timestamp | date:'dd/MM/yyyy HH:mm' }}
             </p>
             <blockquote class="obs-text">
-              {{ ultimaDevolucion.observaciones || 'Sin observaciones adicionales.' }}
+              {{ ultimaDevolucion.observaciones || 'Sin observaciones adicionales. Consultá con el equipo responsable.' }}
             </blockquote>
+            <p class="obs-ayuda">
+              Corregí lo solicitado y enviá tu respuesta en el formulario a continuación.
+            </p>
           </mat-card-content>
         </mat-card>
 
@@ -176,23 +182,38 @@ import { Tramite, HistorialEntry } from '../../shared/models/tramite.model';
 
     .obs-card mat-card-title mat-icon {
       color: #e65100;
+      font-size: 22px;
+      width: 22px;
+      height: 22px;
+    }
+
+    .obs-card--devuelto {
+      background: #fff8e1;
+      border: 1px solid #ffb74d;
     }
 
     .obs-responsable {
       font-size: 0.85rem;
-      color: #757575;
+      color: #6d4c41;
       margin: 0 0 12px;
     }
 
     .obs-text {
-      margin: 0;
+      margin: 0 0 12px;
       padding: 12px 16px;
-      background: #fff3e0;
+      background: #ffecb3;
       border-left: 4px solid #ff8f00;
       border-radius: 0 4px 4px 0;
       font-size: 0.9rem;
-      color: #424242;
+      color: #3e2723;
       line-height: 1.6;
+    }
+
+    .obs-ayuda {
+      margin: 0;
+      font-size: 0.82rem;
+      color: #8d6e63;
+      font-style: italic;
     }
 
     /* Formulario */
