@@ -76,6 +76,7 @@ Formularios vinculados por userTask:
 - Login: campo `token` (no accessToken)
 - DTOs siempre, URLs solo en environment.ts, lógica IA solo en services/
 - User: `rol_id` (String) → `rolId` en Java
+- **Auth storage: `sessionStorage`** (NO localStorage) — aislado por pestaña, evita bug de sesión cruzada entre tabs
 
 ## Endpoints consolidados (:8080)
 - `POST /auth/login` → `{ token, nombreCompleto, rolNombre }`

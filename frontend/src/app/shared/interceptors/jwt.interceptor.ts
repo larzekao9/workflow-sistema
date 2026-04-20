@@ -11,7 +11,7 @@ import { AuthService } from '../services/auth.service';
 export const SKIP_AUTH_LOGOUT = new HttpContextToken<boolean>(() => false);
 
 export const jwtInterceptor: HttpInterceptorFn = (req, next) => {
-  const token = localStorage.getItem('access_token');
+  const token = sessionStorage.getItem('access_token');
   const authService = inject(AuthService);
 
   let clonedReq = req;
