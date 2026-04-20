@@ -39,6 +39,15 @@ public class BpmnMotorService {
         "bpmn2:inclusiveGateway", "bpmn:inclusiveGateway", "inclusiveGateway",
         "bpmn2:parallelGateway", "bpmn:parallelGateway", "parallelGateway"
     };
+    // Tareas automáticas (sin intervención humana) — se atraviesan igual que gateways
+    private static final String[] AUTO_TASK_TAGS   = {
+        "bpmn2:serviceTask", "bpmn:serviceTask", "serviceTask",
+        "bpmn2:sendTask",    "bpmn:sendTask",    "sendTask",
+        "bpmn2:receiveTask", "bpmn:receiveTask", "receiveTask",
+        "bpmn2:scriptTask",  "bpmn:scriptTask",  "scriptTask",
+        "bpmn2:businessRuleTask", "bpmn:businessRuleTask", "businessRuleTask",
+        "bpmn2:task",        "bpmn:task",        "task"
+    };
 
     // Fallback cuando el BPMN no tiene UserTasks
     private static final BpmnTask FALLBACK_TASK = new BpmnTask("manual", "Revisión Manual");
@@ -181,7 +190,10 @@ public class BpmnMotorService {
 
         try {
             Document doc = parseXml(bpmnXml);
-            Element taskEl = findElementById(doc, taskId, USER_TASK_TAGS);
+            // Busca en userTask primero, luego en task genérico
+            String[] allTaskTags = {"bpmn2:userTask","bpmn:userTask","userTask",
+                                    "bpmn2:task","bpmn:task","task"};
+            Element taskEl = findElementById(doc, taskId, allTaskTags);
             if (taskEl == null) {
                 return "FUNCIONARIO";
             }
@@ -213,7 +225,11 @@ public class BpmnMotorService {
             if (docNodes.getLength() > 0) {
                 String text = docNodes.item(0).getTextContent();
                 if (text != null && !text.isBlank()) {
-                    return text.trim().toUpperCase();
+                    String upper = text.trim().toUpperCase();
+                    // Soporta formato "ROL:FUNCIONARIO" o "FUNCIONARIO" directamente
+                    java.util.regex.Matcher m = java.util.regex.Pattern
+                            .compile("ROL:([A-Z_]+)").matcher(upper);
+                    return m.find() ? m.group(1) : upper;
                 }
             }
 
@@ -312,6 +328,20 @@ public class BpmnMotorService {
         if (gwEl != null) {
             List<String> gwTargets = findOutgoingTargets(doc, nodeId);
             for (String target : gwTargets) {
+                Optional<BpmnTask> resolved = resolveNode(doc, target);
+                if (resolved != null) {
+                    return resolved;
+                }
+            }
+            return Optional.empty();
+        }
+
+        // ¿Es tarea automática (serviceTask, scriptTask, etc.)? → atraviesa igual que gateway
+        Element autoEl = findElementById(doc, nodeId, AUTO_TASK_TAGS);
+        if (autoEl != null) {
+            log.debug("[BpmnMotor] Tarea automática '{}' ('{}') — atravesando", nodeId, autoEl.getAttribute("name"));
+            List<String> autoTargets = findOutgoingTargets(doc, nodeId);
+            for (String target : autoTargets) {
                 Optional<BpmnTask> resolved = resolveNode(doc, target);
                 if (resolved != null) {
                     return resolved;

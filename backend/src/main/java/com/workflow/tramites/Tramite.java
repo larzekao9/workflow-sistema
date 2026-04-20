@@ -102,6 +102,9 @@ public class Tramite {
     @Indexed
     private String clienteId;
 
+    @Field("cliente_nombre")
+    private String clienteNombre;
+
     @Field("asignado_a_id")
     @Indexed
     private String asignadoAId;

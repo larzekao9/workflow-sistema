@@ -15,6 +15,7 @@ public class TramiteResponse {
     private String politicaNombre;
     private Integer politicaVersion;
     private String clienteId;
+    private String clienteNombre;
     private String asignadoAId;
     private String asignadoANombre;
     private String estado;
@@ -56,6 +57,7 @@ public class TramiteResponse {
                 .politicaNombre(tramite.getPoliticaNombre())
                 .politicaVersion(tramite.getPoliticaVersion())
                 .clienteId(tramite.getClienteId())
+                .clienteNombre(tramite.getClienteNombre())
                 .asignadoAId(tramite.getAsignadoAId())
                 .asignadoANombre(tramite.getAsignadoANombre())
                 .estado(tramite.getEstado().name())

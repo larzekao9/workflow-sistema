@@ -84,6 +84,7 @@ public class TramiteService {
                 .politicaNombre(politica.getNombre())
                 .politicaVersion(politica.getVersion())
                 .clienteId(clienteId)
+                .clienteNombre(clienteNombre)
                 .estado(Tramite.EstadoTramite.INICIADO)
                 .etapaActual(etapa)
                 .historial(new ArrayList<>())
