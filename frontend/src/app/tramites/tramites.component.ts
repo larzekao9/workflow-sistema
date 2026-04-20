@@ -213,6 +213,29 @@ type Rol = 'ADMINISTRADOR' | 'FUNCIONARIO' | 'CLIENTE';
           </ng-container>
 
           <!-- Acciones -->
+          <!-- Columna asignado — solo FUNCIONARIO -->
+          <ng-container matColumnDef="asignado">
+            <th mat-header-cell *matHeaderCellDef scope="col">Asignado</th>
+            <td mat-cell *matCellDef="let t">
+              <ng-container *ngIf="t.asignadoAId === currentUserId && currentUserId">
+                <span class="asignado-tuyo">
+                  <mat-icon style="font-size:14px;vertical-align:middle">person</mat-icon> Tuyo
+                </span>
+              </ng-container>
+              <ng-container *ngIf="t.asignadoAId && t.asignadoAId !== currentUserId">
+                <span class="asignado-otro" [matTooltip]="t.asignadoANombre || ''">
+                  {{ (t.asignadoANombre || '') | slice:0:12 }}…
+                </span>
+              </ng-container>
+              <ng-container *ngIf="!t.asignadoAId && (t.estado === 'INICIADO' || t.estado === 'EN_PROCESO')">
+                <button mat-stroked-button color="primary" style="font-size:12px;height:28px;line-height:28px"
+                  (click)="tomarTramite(t.id, $event)">
+                  <mat-icon style="font-size:14px">assignment_ind</mat-icon> Tomar
+                </button>
+              </ng-container>
+            </td>
+          </ng-container>
+
           <ng-container matColumnDef="acciones">
             <th mat-header-cell *matHeaderCellDef scope="col">Acciones</th>
             <td mat-cell *matCellDef="let t">
@@ -472,6 +495,14 @@ type Rol = 'ADMINISTRADOR' | 'FUNCIONARIO' | 'CLIENTE';
     }
 
     /* Acciones */
+    .asignado-tuyo {
+      display: inline-flex; align-items: center; gap: 2px;
+      background: #e8f5e9; color: #2e7d32;
+      padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 500;
+    }
+    .asignado-otro {
+      color: #9e9e9e; font-size: 12px;
+    }
     .acciones-cell {
       display: flex;
       gap: 4px;
@@ -502,6 +533,7 @@ export class TramitesComponent implements OnInit {
 
   rol: Rol = 'CLIENTE';
   user: User | null = null;
+  currentUserId = '';
 
   filtrosForm: FormGroup;
 
@@ -531,7 +563,7 @@ export class TramitesComponent implements OnInit {
       return ['estado', 'politicaNombre', 'clienteNombre', 'etapa', 'creadoEn', 'acciones'];
     }
     if (this.rol === 'FUNCIONARIO') {
-      return ['estado', 'politicaNombre', 'clienteNombre', 'etapa', 'creadoEn', 'acciones'];
+      return ['estado', 'politicaNombre', 'clienteNombre', 'etapa', 'asignado', 'creadoEn', 'acciones'];
     }
     // CLIENTE
     return ['estado', 'politicaNombre', 'etapa', 'creadoEn', 'acciones'];
@@ -579,6 +611,7 @@ export class TramitesComponent implements OnInit {
 
   ngOnInit(): void {
     this.user = this.authService.getCurrentUser();
+    this.currentUserId = this.user?.id ?? '';
     this.resolveRol();
     this.load();
 
@@ -665,5 +698,17 @@ export class TramitesComponent implements OnInit {
   responderTramite(id: string, event?: Event): void {
     event?.stopPropagation();
     this.router.navigate(['/tramites', id, 'correccion']);
+  }
+
+  tomarTramite(id: string, event?: Event): void {
+    event?.stopPropagation();
+    this.tramiteService.tomar(id).subscribe({
+      next: () => {
+        this.snackBar.open('Trámite tomado — ahora está asignado a vos', '', { duration: 2500 });
+        this.load();
+      },
+      error: (e: { error?: { message?: string } }) =>
+        this.snackBar.open(e?.error?.message || 'Error al tomar el trámite', 'Cerrar', { duration: 3000 })
+    });
   }
 }

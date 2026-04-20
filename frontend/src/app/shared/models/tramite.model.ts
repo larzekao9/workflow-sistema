@@ -28,6 +28,8 @@ export interface Tramite {
   estado: EstadoTramite;
   etapaActual?: EtapaActual;
   historial: HistorialEntry[];
+  asignadoAId?: string;
+  asignadoANombre?: string;
   creadoEn: string;
   actualizadoEn: string;
   fechaVencimientoEtapa?: string;

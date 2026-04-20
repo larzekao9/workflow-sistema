@@ -139,9 +139,9 @@ import { CreatePoliticaDialogComponent } from '../create-politica-dialog/create-
                 <button
                   mat-icon-button
                   color="primary"
-                  *ngIf="p.estado === 'BORRADOR'"
+                  *ngIf="p.estado === 'BORRADOR' || p.estado === 'INACTIVA'"
                   (click)="publishPolitica(p)"
-                  matTooltip="Publicar">
+                  matTooltip="Publicar / Reactivar">
                   <mat-icon>publish</mat-icon>
                 </button>
                 <button

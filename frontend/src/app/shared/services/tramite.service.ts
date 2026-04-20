@@ -54,4 +54,8 @@ export class TramiteService {
   getFormularioActual(id: string): Observable<FormularioActualResponse> {
     return this.http.get<FormularioActualResponse>(`${this.base}/${id}/formulario-actual`);
   }
+
+  tomar(id: string): Observable<Tramite> {
+    return this.http.post<Tramite>(`${this.base}/${id}/tomar`, {});
+  }
 }

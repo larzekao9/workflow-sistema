@@ -69,15 +69,12 @@ public class PoliticaService {
     public Map<String, Object> getBpmn(String id) {
         Politica politica = findOrThrow(id);
         String xml = politica.getBpmnXml();
-        boolean needsRegeneration = xml == null || xml.isBlank() || !xml.contains("BPMNDiagram");
-        if (needsRegeneration) {
+        // Solo regenerar si está completamente vacío — no borrar XML válido sin BPMNDiagram
+        if (xml == null || xml.isBlank()) {
             xml = buildInitialBpmnXml(id);
-            // Si no tenía XML previo, persistir para evitar regenerar en cada llamada
-            if (politica.getBpmnXml() == null || politica.getBpmnXml().isBlank()) {
-                politica.setBpmnXml(xml);
-                politicaRepository.save(politica);
-            }
-            log.info("BPMN XML regenerado para politicaId={} (XML previo inválido o ausente)", id);
+            politica.setBpmnXml(xml);
+            politicaRepository.save(politica);
+            log.info("BPMN XML inicial generado para politicaId={}", id);
         }
         int version = politica.getBpmnVersion() != null ? politica.getBpmnVersion() : 0;
         return Map.of("bpmnXml", xml, "bpmnVersion", version);
@@ -250,7 +247,11 @@ public class PoliticaService {
 
     public PoliticaResponse publicar(String id) {
         Politica politica = findOrThrow(id);
-        verificarBorrador(politica);
+        // Permite publicar desde BORRADOR o INACTIVA (reactivación)
+        if (politica.getEstado() != Politica.EstadoPolitica.BORRADOR
+                && politica.getEstado() != Politica.EstadoPolitica.INACTIVA) {
+            throw new BadRequestException("Solo se puede publicar una política en estado BORRADOR o INACTIVA. Estado actual: " + politica.getEstado());
+        }
 
         // Si la política tiene BPMN XML pero no tiene actividades legacy,
         // hacer validación simplificada (Sprint 2.7 agrega bpmnlint real)
