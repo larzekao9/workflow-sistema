@@ -30,22 +30,22 @@ export class AuthService {
   }
 
   logout(): void {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('current_user');
+    sessionStorage.removeItem('access_token');
+    sessionStorage.removeItem('current_user');
     this.currentUser$.next(null);
     this.router.navigate(['/login']);
   }
 
   isAuthenticated(): boolean {
-    return !!localStorage.getItem('access_token');
+    return !!sessionStorage.getItem('access_token');
   }
 
   getToken(): string | null {
-    return localStorage.getItem('access_token');
+    return sessionStorage.getItem('access_token');
   }
 
   getCurrentUser(): User | null {
-    const raw = localStorage.getItem('current_user');
+    const raw = sessionStorage.getItem('current_user');
     if (!raw) return null;
     try {
       return JSON.parse(raw) as User;
@@ -55,8 +55,8 @@ export class AuthService {
   }
 
   private handleAuthResponse(response: AuthResponse): void {
-    localStorage.setItem('access_token', response.token);
-    localStorage.setItem('current_user', JSON.stringify(response.user));
+    sessionStorage.setItem('access_token', response.token);
+    sessionStorage.setItem('current_user', JSON.stringify(response.user));
     this.currentUser$.next(response.user);
   }
 }
