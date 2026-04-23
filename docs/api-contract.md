@@ -355,6 +355,61 @@ TramiteResponse:
 
 ---
 
+## Empresas `[GET público | escritura requiere GESTIONAR_EMPRESAS]`
+Sprint 3.1 — Módulo multi-empresa. Última actualización: 2026-04-22.
+
+### GET /empresas → 200 `EmpresaResponse[]`
+Lista todas las empresas activas. Público (no requiere JWT).
+
+### GET /empresas/{id} → 200 `EmpresaResponse`
+Detalle de una empresa. Público. Error 404 si no existe.
+
+### POST /empresas → 201 `EmpresaResponse`
+Requiere `GESTIONAR_EMPRESAS` (solo SUPERADMIN).
+Request:
+```json
+{ "nombre": "str (requerido, max 150)", "razonSocial": "str?", "nit": "str?", "emailContacto": "email?", "telefono": "str?", "direccion": "str?", "ciudad": "str?", "pais": "str?", "activa": "bool?" }
+```
+Error 400 si ya existe una empresa con ese nombre.
+
+### PUT /empresas/{id} → 200 `EmpresaResponse`
+Requiere `GESTIONAR_EMPRESAS`. Actualiza solo campos no nulos (patch semántico).
+Error 404 si no existe. Error 400 si el nuevo nombre ya está tomado.
+
+### DELETE /empresas/{id} → 204
+Requiere `GESTIONAR_EMPRESAS`. Soft delete (`activa = false`).
+
+EmpresaResponse:
+```json
+{ "id", "nombre", "razonSocial", "nit", "emailContacto", "telefono", "direccion", "ciudad", "pais", "activa", "adminPrincipalId", "creadoEn", "actualizadoEn" }
+```
+
+---
+
+## Files `[POST requiere JWT | GET público | DELETE requiere GESTIONAR_USUARIOS o GESTIONAR_EMPRESAS]`
+Sprint 3.1 — Almacenamiento de archivos. Última actualización: 2026-04-22.
+
+### POST /files/upload → 201 `FileReference`
+Sube un archivo. Content-Type: `multipart/form-data`, field: `file`.
+Tipos permitidos: `image/jpeg`, `image/png`, `application/pdf`, `application/msword`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document`.
+Tamaño máximo: 10 MB.
+Error 400 si el tipo MIME no está permitido o supera el tamaño.
+
+### GET /files/{fileId} → 200 `Resource`
+Sirve el archivo con su Content-Type correcto.
+Uso: referenciable directamente en `<img src>` sin token.
+Error 404 si el archivo no existe.
+
+### DELETE /files/{fileId} → 204
+Elimina el archivo físicamente. Requiere autoridad `GESTIONAR_USUARIOS` o `GESTIONAR_EMPRESAS`.
+
+FileReference (también clase embebible en otros Documents):
+```json
+{ "fileId": "uuid", "nombre": "str (nombre original)", "tipo": "MIME type", "url": "/files/{fileId}", "tamanio": "bytes (Long)", "subidoEn": "ISO datetime" }
+```
+
+---
+
 ## AI Service
 Base URL: `http://localhost:8001`
 

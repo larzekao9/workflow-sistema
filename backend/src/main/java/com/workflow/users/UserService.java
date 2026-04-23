@@ -1,6 +1,8 @@
 package com.workflow.users;
 
+import com.workflow.departments.DepartmentRepository;
 import com.workflow.roles.RoleRepository;
+import com.workflow.shared.SecurityUtils;
 import com.workflow.shared.exception.BadRequestException;
 import com.workflow.shared.exception.ResourceNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -19,7 +21,9 @@ public class UserService implements UserDetailsService {
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
+    private final DepartmentRepository departmentRepository;
     private final PasswordEncoder passwordEncoder;
+    private final SecurityUtils securityUtils;
 
     // --- UserDetailsService ---
 
@@ -38,26 +42,31 @@ public class UserService implements UserDetailsService {
                 }
             });
         }
-        
+
         return user;
     }
 
     // --- CRUD ---
 
     public UserResponse createUser(CreateUserRequest request) {
-        // Verificar unicidad de email
         userRepository.findByEmail(request.getEmail()).ifPresent(existing -> {
             throw new BadRequestException("Ya existe un usuario con el email: " + request.getEmail());
         });
 
-        // Verificar unicidad de username
         userRepository.findByUsername(request.getUsername()).ifPresent(existing -> {
             throw new BadRequestException("Ya existe un usuario con el username: " + request.getUsername());
         });
 
-        // Verificar que el rol exista
         roleRepository.findById(request.getRolId())
                 .orElseThrow(() -> new ResourceNotFoundException("Rol", request.getRolId()));
+
+        // Resolver nombre del departamento y guardarlo denormalizado para el motor BPMN
+        String departamentoNombre = null;
+        if (request.getDepartmentId() != null && !request.getDepartmentId().isBlank()) {
+            departamentoNombre = departmentRepository.findById(request.getDepartmentId())
+                    .map(dept -> dept.getNombre())
+                    .orElseThrow(() -> new ResourceNotFoundException("Departamento no encontrado: " + request.getDepartmentId()));
+        }
 
         User user = User.builder()
                 .username(request.getUsername())
@@ -65,14 +74,15 @@ public class UserService implements UserDetailsService {
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .nombreCompleto(request.getNombreCompleto())
                 .rolId(request.getRolId())
-                .departamento(request.getDepartamento())
+                .departamento(departamentoNombre)
+                .departmentId(request.getDepartmentId())
+                .cargo(request.getCargo())
                 .activo(true)
                 .creadoEn(LocalDateTime.now())
                 .actualizadoEn(LocalDateTime.now())
                 .build();
 
-        User saved = userRepository.save(user);
-        return toResponse(saved);
+        return toResponse(userRepository.save(user));
     }
 
     public List<UserResponse> getAllUsers() {
@@ -92,33 +102,40 @@ public class UserService implements UserDetailsService {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario", id));
 
-        // Solo actualizar campos que vienen con valor
         if (request.getNombreCompleto() != null) {
             user.setNombreCompleto(request.getNombreCompleto());
         }
-        if (request.getDepartamento() != null) {
-            user.setDepartamento(request.getDepartamento());
-        }
         if (request.getRolId() != null) {
-            // Verificar que el nuevo rol exista
             roleRepository.findById(request.getRolId())
                     .orElseThrow(() -> new ResourceNotFoundException("Rol", request.getRolId()));
             user.setRolId(request.getRolId());
+        }
+        if (request.getDepartmentId() != null) {
+            if (request.getDepartmentId().isBlank()) {
+                user.setDepartmentId(null);
+                user.setDepartamento(null);
+            } else {
+                String deptNombre = departmentRepository.findById(request.getDepartmentId())
+                        .map(dept -> dept.getNombre())
+                        .orElseThrow(() -> new ResourceNotFoundException("Departamento no encontrado: " + request.getDepartmentId()));
+                user.setDepartmentId(request.getDepartmentId());
+                user.setDepartamento(deptNombre);
+            }
+        }
+        if (request.getCargo() != null) {
+            user.setCargo(request.getCargo().isBlank() ? null : request.getCargo());
         }
         if (request.getActivo() != null) {
             user.setActivo(request.getActivo());
         }
         user.setActualizadoEn(LocalDateTime.now());
 
-        User updated = userRepository.save(user);
-        return toResponse(updated);
+        return toResponse(userRepository.save(user));
     }
 
     public void deleteUser(String id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario", id));
-
-        // Soft delete — no se borra físicamente, solo se desactiva
         user.setActivo(false);
         user.setActualizadoEn(LocalDateTime.now());
         userRepository.save(user);
@@ -139,6 +156,13 @@ public class UserService implements UserDetailsService {
                     .orElse(null);
         }
 
+        String departmentNombre = null;
+        if (user.getDepartmentId() != null && !user.getDepartmentId().isBlank()) {
+            departmentNombre = departmentRepository.findById(user.getDepartmentId())
+                    .map(dept -> dept.getNombre())
+                    .orElse(null);
+        }
+
         return UserResponse.builder()
                 .id(user.getId())
                 .username(user.getUsername())
@@ -147,6 +171,9 @@ public class UserService implements UserDetailsService {
                 .rolId(user.getRolId())
                 .rolNombre(rolNombre)
                 .departamento(user.getDepartamento())
+                .departmentId(user.getDepartmentId())
+                .departmentNombre(departmentNombre)
+                .cargo(user.getCargo())
                 .activo(user.isActivo())
                 .creadoEn(user.getCreadoEn())
                 .build();

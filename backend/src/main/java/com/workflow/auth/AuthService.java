@@ -32,7 +32,6 @@ public class AuthService {
                 .password(request.getPassword())
                 .nombreCompleto(request.getNombreCompleto())
                 .rolId(request.getRolId())
-                .departamento(request.getDepartamento())
                 .build();
 
         UserResponse userResponse = userService.createUser(createRequest);

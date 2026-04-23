@@ -27,7 +27,7 @@ public class BpmnMotorService {
     // Clase de resultado
     // -----------------------------------------------------------------------
 
-    public record BpmnTask(String id, String name) {}
+    public record BpmnTask(String id, String name, String area) {}
 
     // Tags BPMN con los distintos namespaces que puede traer bpmn-js
     private static final String[] USER_TASK_TAGS   = {"bpmn2:userTask", "bpmn:userTask", "userTask"};
@@ -50,7 +50,7 @@ public class BpmnMotorService {
     };
 
     // Fallback cuando el BPMN no tiene UserTasks
-    private static final BpmnTask FALLBACK_TASK = new BpmnTask("manual", "Revisión Manual");
+    private static final BpmnTask FALLBACK_TASK = new BpmnTask("manual", "Revisión Manual", null);
 
     // -----------------------------------------------------------------------
     // API pública
@@ -152,6 +152,43 @@ public class BpmnMotorService {
             }
         } catch (Exception e) {
             log.warn("[BpmnMotor] Error extrayendo formId de task {}: {}", taskId, e.getMessage());
+        }
+        return null;
+    }
+
+    /**
+     * Extrae el área responsable de una UserTask desde documentation.
+     * Espera patrón "AREA:NombreArea" (case-insensitive).
+     * Retorna null si no se define área (cualquier funcionario puede procesar).
+     */
+    public String extractAreaFromTask(String bpmnXml, String taskId) {
+        if (bpmnXml == null || bpmnXml.isBlank() || taskId == null) {
+            return null;
+        }
+        try {
+            Document doc = parseXml(bpmnXml);
+            String[] allTaskTags = {"bpmn2:userTask","bpmn:userTask","userTask",
+                                    "bpmn2:task","bpmn:task","task"};
+            Element taskEl = findElementById(doc, taskId, allTaskTags);
+            return taskEl != null ? extractArea(taskEl) : null;
+        } catch (Exception e) {
+            log.warn("[BpmnMotor] Error extrayendo área de tarea {}: {}", taskId, e.getMessage());
+            return null;
+        }
+    }
+
+    private String extractArea(Element taskElement) {
+        for (String docTag : List.of("documentation", "bpmn:documentation", "bpmn2:documentation")) {
+            NodeList docs = taskElement.getElementsByTagName(docTag);
+            if (docs.getLength() > 0) {
+                String text = docs.item(0).getTextContent();
+                if (text != null) {
+                    java.util.regex.Matcher m = java.util.regex.Pattern
+                            .compile("AREA:(.+)", java.util.regex.Pattern.CASE_INSENSITIVE)
+                            .matcher(text);
+                    if (m.find()) return m.group(1).trim();
+                }
+            }
         }
         return null;
     }
@@ -314,7 +351,7 @@ public class BpmnMotorService {
         Element taskEl = findElementById(doc, nodeId, USER_TASK_TAGS);
         if (taskEl != null) {
             String name = taskEl.getAttribute("name");
-            return Optional.of(new BpmnTask(nodeId, name.isBlank() ? "Tarea " + nodeId : name));
+            return Optional.of(new BpmnTask(nodeId, name.isBlank() ? "Tarea " + nodeId : name, extractArea(taskEl)));
         }
 
         // ¿Es EndEvent?

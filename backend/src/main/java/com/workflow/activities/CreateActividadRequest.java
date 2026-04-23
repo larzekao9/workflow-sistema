@@ -33,6 +33,10 @@ public class CreateActividadRequest {
 
     private String formularioId;
 
+    private String cargoRequerido;
+
+    private String departmentId;
+
     @Valid
     @Builder.Default
     private PosicionRequest posicion = new PosicionRequest(0.0, 0.0);

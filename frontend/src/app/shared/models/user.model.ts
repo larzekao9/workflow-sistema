@@ -7,8 +7,12 @@ export interface User {
   rolId: string;
   rolNombre?: string;
   departamento?: string;
+  departmentId?: string;
+  departmentNombre?: string;
+  cargo?: string;
   activo: boolean;
   creadoEn: string;
+  empresaId?: string;
 }
 
 export interface CreateUserRequest {
@@ -17,14 +21,18 @@ export interface CreateUserRequest {
   nombreCompleto: string;
   password: string;
   rolId: string;
-  departamento?: string;
+  departmentId?: string;
+  cargo?: string;
+  empresaId?: string;
 }
 
 export interface UpdateUserRequest {
   nombreCompleto?: string;
-  departamento?: string;
   rolId?: string;
+  departmentId?: string;
+  cargo?: string;
   activo?: boolean;
+  empresaId?: string;
 }
 
 export interface AuthResponse {

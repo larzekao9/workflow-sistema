@@ -48,6 +48,15 @@ public class User implements UserDetails {
     @Field("departamento")
     private String departamento;
 
+    @Field("department_id")
+    private String departmentId;
+
+    @Field("cargo")
+    private String cargo;
+
+    @Field("empresa_id")
+    private String empresaId;
+
     @Builder.Default
     @Field("activo")
     private boolean activo = true;

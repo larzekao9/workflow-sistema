@@ -13,8 +13,13 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
 import { UserService } from '../../shared/services/user.service';
 import { RoleService } from '../../shared/services/role.service';
+import { DepartmentService } from '../../shared/services/department.service';
+import { EmpresaService } from '../../shared/services/empresa.service';
+import { AuthService } from '../../shared/services/auth.service';
 import { User, CreateUserRequest, UpdateUserRequest } from '../../shared/models/user.model';
 import { Role } from '../../shared/models/role.model';
+import { Department } from '../../shared/models/department.model';
+import { Empresa } from '../../shared/models/empresa.model';
 
 export interface UserFormData {
   user?: User;
@@ -56,14 +61,14 @@ export interface UserFormData {
 
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>Correo electrónico</mat-label>
-          <input matInput type="email" formControlName="email" />
+          <input matInput type="email" formControlName="email" autocomplete="email" />
           <mat-error *ngIf="form.get('email')?.hasError('required')">Campo obligatorio</mat-error>
           <mat-error *ngIf="form.get('email')?.hasError('email')">Correo inválido</mat-error>
         </mat-form-field>
 
         <mat-form-field *ngIf="!isEditMode" appearance="outline" class="full-width">
           <mat-label>Contraseña</mat-label>
-          <input matInput type="password" formControlName="password" />
+          <input matInput type="password" formControlName="password" autocomplete="new-password" />
           <mat-error *ngIf="form.get('password')?.hasError('required')">Campo obligatorio</mat-error>
           <mat-error *ngIf="form.get('password')?.hasError('minlength')">Mínimo 6 caracteres</mat-error>
         </mat-form-field>
@@ -78,11 +83,39 @@ export interface UserFormData {
           <mat-error *ngIf="form.get('rolId')?.hasError('required')">Seleccioná un rol</mat-error>
         </mat-form-field>
 
+        <!-- Selector de empresa: solo visible para SUPERADMIN -->
+        <mat-form-field *ngIf="isSuperAdmin" appearance="outline" class="full-width">
+          <mat-label>Empresa</mat-label>
+          <mat-select formControlName="empresaId" aria-label="Seleccionar empresa">
+            <mat-option value="">Sin empresa (SUPERADMIN)</mat-option>
+            <mat-option *ngFor="let e of empresas" [value]="e.id">{{ e.nombre }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <ng-container *ngIf="showDepartmentFields">
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Departamento</mat-label>
+            <mat-select formControlName="departmentId">
+              <mat-option [value]="null">Sin departamento</mat-option>
+              <mat-option *ngFor="let dept of departments" [value]="dept.id">
+                {{ dept.nombre }}
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Cargo</mat-label>
+            <input matInput formControlName="cargo" placeholder="Ej: Analista de trámites" autocomplete="off" />
+          </mat-form-field>
+        </ng-container>
+
         <mat-slide-toggle *ngIf="isEditMode" formControlName="activo" color="primary">
           Usuario activo
         </mat-slide-toggle>
 
-        <div *ngIf="errorMessage" class="error-message">{{ errorMessage }}</div>
+        <div *ngIf="errorMessage" class="error-message" role="alert" aria-live="polite">
+          {{ errorMessage }}
+        </div>
 
       </form>
     </mat-dialog-content>
@@ -102,7 +135,11 @@ export interface UserFormData {
   styles: [`
     .form-container { display: flex; flex-direction: column; gap: 4px; min-width: 380px; padding-top: 8px; }
     .full-width { width: 100%; }
-    .error-message { color: #f44336; font-size: 13px; padding: 8px 0; }
+    .error-message { color: #b71c1c; font-size: 13px; padding: 8px 0; }
+
+    @media (max-width: 400px) {
+      .form-container { min-width: unset; width: 100%; }
+    }
   `]
 })
 export class UserFormComponent implements OnInit {
@@ -111,11 +148,17 @@ export class UserFormComponent implements OnInit {
   isLoading = false;
   errorMessage = '';
   roles: Role[] = [];
+  departments: Department[] = [];
+  empresas: Empresa[] = [];
+  isSuperAdmin = false;
 
   constructor(
     private fb: FormBuilder,
     private userService: UserService,
     private roleService: RoleService,
+    private departmentService: DepartmentService,
+    private empresaService: EmpresaService,
+    private authService: AuthService,
     private snackBar: MatSnackBar,
     private dialogRef: MatDialogRef<UserFormComponent>,
     @Inject(MAT_DIALOG_DATA) public data: UserFormData
@@ -131,14 +174,43 @@ export class UserFormComponent implements OnInit {
         this.isEditMode ? [] : [Validators.required, Validators.minLength(6)]
       ],
       rolId: [data?.user?.rolId ?? '', [Validators.required]],
-      activo: [data?.user?.activo ?? true]
+      departmentId: [data?.user?.departmentId ?? null],
+      cargo: [data?.user?.cargo ?? ''],
+      activo: [data?.user?.activo ?? true],
+      empresaId: [data?.user?.empresaId ?? '']
     });
   }
 
+  get showDepartmentFields(): boolean {
+    const selectedRolId = this.form.get('rolId')?.value;
+    if (!selectedRolId) return false;
+    const selectedRole = this.roles.find(r => r.id === selectedRolId);
+    return !selectedRole?.nombre?.toUpperCase().includes('CLIENTE');
+  }
+
   ngOnInit(): void {
+    // Detectar si el usuario actual es SUPERADMIN
+    const currentUser = this.authService.getCurrentUser();
+    this.isSuperAdmin = currentUser?.rolNombre?.toUpperCase().includes('SUPERADMIN') ?? false;
+
+    // Cargar empresas solo si es SUPERADMIN
+    if (this.isSuperAdmin) {
+      this.empresaService.getAll().subscribe({
+        next: (empresas) => { this.empresas = empresas; },
+        error: () => { this.empresas = []; }
+      });
+    }
+
     this.roleService.getAll().subscribe({
       next: (roles) => { this.roles = roles; },
       error: () => { this.roles = []; }
+    });
+
+    this.departmentService.getAll().subscribe({
+      next: (departments) => {
+        this.departments = departments.filter(d => d.activa);
+      },
+      error: () => { this.departments = []; }
     });
   }
 
@@ -148,11 +220,19 @@ export class UserFormComponent implements OnInit {
     this.isLoading = true;
     this.errorMessage = '';
 
+    // empresaId se incluye solo cuando el usuario actual es SUPERADMIN y seleccionó un valor
+    const empresaIdValue: string | undefined = this.isSuperAdmin
+      ? (this.form.value.empresaId || undefined)
+      : undefined;
+
     if (this.isEditMode && this.data.user) {
       const updateData: UpdateUserRequest = {
         nombreCompleto: this.form.value.nombreCompleto,
         rolId: this.form.value.rolId,
-        activo: this.form.value.activo
+        departmentId: this.showDepartmentFields ? (this.form.value.departmentId || undefined) : undefined,
+        cargo: this.showDepartmentFields ? (this.form.value.cargo?.trim() || undefined) : undefined,
+        activo: this.form.value.activo,
+        empresaId: empresaIdValue
       };
 
       this.userService.update(this.data.user.id, updateData).subscribe({
@@ -164,6 +244,7 @@ export class UserFormComponent implements OnInit {
         error: (err) => {
           this.isLoading = false;
           this.errorMessage = err?.error?.message || 'Error al actualizar el usuario.';
+          console.error('Error actualizando usuario:', err);
         }
       });
     } else {
@@ -172,7 +253,10 @@ export class UserFormComponent implements OnInit {
         username: this.form.value.username,
         email: this.form.value.email,
         password: this.form.value.password,
-        rolId: this.form.value.rolId
+        rolId: this.form.value.rolId,
+        departmentId: this.showDepartmentFields ? (this.form.value.departmentId || undefined) : undefined,
+        cargo: this.showDepartmentFields ? (this.form.value.cargo?.trim() || undefined) : undefined,
+        empresaId: empresaIdValue
       };
 
       this.userService.create(createData).subscribe({
@@ -184,6 +268,7 @@ export class UserFormComponent implements OnInit {
         error: (err) => {
           this.isLoading = false;
           this.errorMessage = err?.error?.message || 'Error al crear el usuario.';
+          console.error('Error creando usuario:', err);
         }
       });
     }

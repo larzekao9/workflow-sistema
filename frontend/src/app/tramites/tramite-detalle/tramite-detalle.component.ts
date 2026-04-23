@@ -211,6 +211,10 @@ export class AccionDialogComponent {
                   <span class="info-label">Equipo responsable</span>
                   <span class="info-value">{{ tramite.etapaActual!.responsableRolNombre }}</span>
                 </div>
+                <div class="info-item" *ngIf="tramite.etapaActual?.area">
+                  <span class="info-label">Área responsable</span>
+                  <span class="info-value">{{ tramite.etapaActual!.area }}</span>
+                </div>
                 <div class="info-item">
                   <span class="info-label">Fecha de inicio</span>
                   <span class="info-value">{{ tramite.creadoEn | date:'dd/MM/yyyy HH:mm' }}</span>
@@ -291,6 +295,10 @@ export class AccionDialogComponent {
                 <div class="info-item" *ngIf="tramite.etapaActual?.responsableRolNombre">
                   <span class="info-label">Responsable</span>
                   <span class="info-value">{{ tramite.etapaActual!.responsableRolNombre }}</span>
+                </div>
+                <div class="info-item" *ngIf="tramite.etapaActual?.area">
+                  <span class="info-label">Área responsable</span>
+                  <span class="info-value">{{ tramite.etapaActual!.area }}</span>
                 </div>
                 <div class="info-item">
                   <span class="info-label">Creado</span>

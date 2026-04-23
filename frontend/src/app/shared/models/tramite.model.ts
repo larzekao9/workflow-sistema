@@ -6,6 +6,7 @@ export interface EtapaActual {
   nombre: string;
   responsableRolNombre: string;
   formularioId?: string;
+  area?: string;
 }
 
 export interface HistorialEntry {

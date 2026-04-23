@@ -164,6 +164,11 @@ interface NavItem {
       white-space: nowrap;
     }
 
+    .role-superadmin {
+      background: #1a237e;
+      color: #fff;
+    }
+
     .role-admin {
       background: #b71c1c;
       color: #ffffff;
@@ -260,13 +265,21 @@ export class AppComponent implements OnInit {
   showSidenav$!: Observable<boolean>;
   currentUser$ = this.authService.currentUser$;
 
+  private readonly NAV_SUPERADMIN: NavItem[] = [
+    { label: 'Dashboard',    icon: 'dashboard',            route: '/dashboard' },
+    { label: 'Empresas',     icon: 'business',             route: '/empresas' },
+    { label: 'Usuarios',     icon: 'people',               route: '/users' },
+    { label: 'Roles',        icon: 'admin_panel_settings', route: '/roles' }
+  ];
+
   private readonly NAV_ADMIN: NavItem[] = [
     { label: 'Dashboard',   icon: 'dashboard',            route: '/dashboard' },
     { label: 'Monitor',     icon: 'monitor_heart',         route: '/tramites' },
     { label: 'Políticas',   icon: 'account_tree',          route: '/policies' },
     { label: 'Formularios', icon: 'dynamic_form',          route: '/forms' },
-    { label: 'Usuarios',    icon: 'people',                route: '/users' },
-    { label: 'Roles',       icon: 'admin_panel_settings',  route: '/roles' }
+    { label: 'Usuarios',       icon: 'people',                route: '/users' },
+    { label: 'Departamentos',  icon: 'corporate_fare',        route: '/departments' },
+    { label: 'Roles',          icon: 'admin_panel_settings',  route: '/roles' }
   ];
 
   private readonly NAV_FUNCIONARIO: NavItem[] = [
@@ -296,6 +309,8 @@ export class AppComponent implements OnInit {
 
   getNavItems(rolNombre: string | undefined): NavItem[] {
     const rol = (rolNombre ?? 'CLIENTE').toUpperCase();
+    // SUPERADMIN debe chequearse antes de ADMIN porque 'SUPERADMIN'.includes('ADMIN') es true
+    if (rol.includes('SUPERADMIN'))  return this.NAV_SUPERADMIN;
     if (rol.includes('ADMIN'))       return this.NAV_ADMIN;
     if (rol.includes('FUNCIONARIO')) return this.NAV_FUNCIONARIO;
     return this.NAV_CLIENTE;
@@ -303,6 +318,8 @@ export class AppComponent implements OnInit {
 
   getRoleChipClass(rolNombre: string | undefined): string {
     const rol = (rolNombre ?? '').toUpperCase();
+    // SUPERADMIN debe chequearse antes de ADMIN por el mismo motivo
+    if (rol.includes('SUPERADMIN'))  return 'role-chip role-superadmin';
     if (rol.includes('ADMIN'))       return 'role-chip role-admin';
     if (rol.includes('FUNCIONARIO')) return 'role-chip role-funcionario';
     if (rol.includes('CLIENTE'))     return 'role-chip role-cliente';

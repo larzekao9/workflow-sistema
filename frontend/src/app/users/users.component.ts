@@ -87,6 +87,16 @@ import { ConfirmDialogComponent } from '../shared/components/confirm-dialog/conf
               </td>
             </ng-container>
 
+            <ng-container matColumnDef="departamento">
+              <th mat-header-cell *matHeaderCellDef>Departamento / Cargo</th>
+              <td mat-cell *matCellDef="let user">
+                <span *ngIf="user.departamento">{{ user.departamento }}</span>
+                <br *ngIf="user.departamento && user.cargo" />
+                <small *ngIf="user.cargo" style="color:#757575">{{ user.cargo }}</small>
+                <span *ngIf="!user.departamento && !user.cargo" class="cell-muted">—</span>
+              </td>
+            </ng-container>
+
             <ng-container matColumnDef="activo">
               <th mat-header-cell *matHeaderCellDef>Estado</th>
               <td mat-cell *matCellDef="let user">
@@ -135,11 +145,12 @@ import { ConfirmDialogComponent } from '../shared/components/confirm-dialog/conf
     .table-container { overflow-x: auto; }
     .loading-container { display: flex; justify-content: center; padding: 48px; }
     .no-data { text-align: center; padding: 24px; color: #888; }
+    .cell-muted { color: #bdbdbd; }
     table { width: 100%; }
   `]
 })
 export class UsersComponent implements OnInit, AfterViewInit {
-  displayedColumns = ['nombreCompleto', 'email', 'username', 'rolNombre', 'activo', 'acciones'];
+  displayedColumns = ['nombreCompleto', 'email', 'username', 'rolNombre', 'departamento', 'activo', 'acciones'];
   dataSource = new MatTableDataSource<User>();
   isLoading = false;
 

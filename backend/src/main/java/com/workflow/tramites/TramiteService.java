@@ -52,8 +52,9 @@ public class TramiteService {
         // 2. Obtiene la primera UserTask del proceso
         BpmnMotorService.BpmnTask primeraTask = bpmnMotorService.getFirstUserTask(politica.getBpmnXml());
 
-        // 3. Extrae el rol responsable y el formulario de esa tarea
+        // 3. Extrae el rol, área y formulario de esa tarea
         String rolNombre = bpmnMotorService.extractRolFromTask(politica.getBpmnXml(), primeraTask.id());
+        String areaTask = bpmnMotorService.extractAreaFromTask(politica.getBpmnXml(), primeraTask.id());
         String formularioId = bpmnMotorService.extractFormIdFromTask(politica.getBpmnXml(), primeraTask.id());
 
         // 4. Obtiene el nombre del cliente
@@ -77,6 +78,7 @@ public class TramiteService {
                 .nombre(primeraTask.name())
                 .responsableRolNombre(rolNombre)
                 .formularioId(formularioId)
+                .area(areaTask)
                 .build();
 
         Tramite tramite = Tramite.builder()
@@ -125,7 +127,14 @@ public class TramiteService {
         }
 
         if (rolNombre.contains("FUNCIONARIO")) {
-            // Asignados a este funcionario + no asignados de su rol (bandeja compartida)
+            // Si el funcionario tiene área asignada, filtrar solo tareas de su área (o sin área)
+            String areaFuncionario = usuario.getDepartamento();
+            if (areaFuncionario != null && !areaFuncionario.isBlank()) {
+                return tramiteRepository
+                        .findBandejaFuncionarioPorArea(rolNombre, areaFuncionario, userId, pageable)
+                        .map(TramiteResponse::fromDocument);
+            }
+            // Sin área asignada: ve todas las tareas de su rol (comportamiento anterior)
             Page<Tramite> asignados = tramiteRepository
                     .findByEtapaActual_ResponsableRolNombreAndAsignadoAId(rolNombre, userId, pageable);
             Page<Tramite> sinAsignar = tramiteRepository
@@ -177,7 +186,13 @@ public class TramiteService {
         }
 
         if (rolNombre.contains("FUNCIONARIO")) {
-            long total = tramiteRepository.countByEtapaActual_ResponsableRolNombre(rolNombre);
+            String areaFuncionario = usuario.getDepartamento();
+            long total;
+            if (areaFuncionario != null && !areaFuncionario.isBlank()) {
+                total = tramiteRepository.countBandejaFuncionarioPorArea(rolNombre, areaFuncionario, userId);
+            } else {
+                total = tramiteRepository.countByEtapaActual_ResponsableRolNombre(rolNombre);
+            }
             return TramiteStatsResponse.builder()
                     .total(total)
                     .iniciados(tramiteRepository.countByEtapaActual_ResponsableRolNombreAndEstado(rolNombre, Tramite.EstadoTramite.INICIADO))
@@ -392,7 +407,7 @@ public class TramiteService {
             tramite.setEtapaActual(null);
             log.info("[TramiteService] Trámite {} COMPLETADO — alcanzó el EndEvent", tramite.getId());
         } else {
-            // Avanza a la siguiente etapa
+            // Avanza a la siguiente etapa — el área ya fue extraída al parsear el nodo
             String nuevoRol = bpmnMotorService.extractRolFromTask(bpmnXml, siguienteTask.id());
             String nuevoFormularioId = bpmnMotorService.extractFormIdFromTask(bpmnXml, siguienteTask.id());
             Tramite.EtapaActual nuevaEtapa = Tramite.EtapaActual.builder()
@@ -400,6 +415,7 @@ public class TramiteService {
                     .nombre(siguienteTask.name())
                     .responsableRolNombre(nuevoRol)
                     .formularioId(nuevoFormularioId)
+                    .area(siguienteTask.area())
                     .build();
             tramite.setEtapaActual(nuevaEtapa);
             tramite.setEstado(Tramite.EstadoTramite.EN_PROCESO);

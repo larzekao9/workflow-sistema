@@ -32,6 +32,7 @@ public class TramiteResponse {
         private String nombre;
         private String responsableRolNombre;
         private String formularioId;
+        private String area;
     }
 
     @Data
@@ -76,6 +77,7 @@ public class TramiteResponse {
                 .nombre(etapa.getNombre())
                 .responsableRolNombre(etapa.getResponsableRolNombre())
                 .formularioId(etapa.getFormularioId())
+                .area(etapa.getArea())
                 .build();
     }
 

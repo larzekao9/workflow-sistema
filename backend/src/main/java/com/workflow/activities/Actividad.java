@@ -82,6 +82,12 @@ public class Actividad {
     @Indexed
     private String formularioId;
 
+    @Field("cargo_requerido")
+    private String cargoRequerido;
+
+    @Field("department_id")
+    private String departmentId;
+
     @Field("posicion")
     @Builder.Default
     private Posicion posicion = new Posicion(0.0, 0.0);

@@ -198,6 +198,8 @@ type Rol = 'ADMINISTRADOR' | 'FUNCIONARIO' | 'CLIENTE';
             <td mat-cell *matCellDef="let t">
               <span *ngIf="t.etapaActual; else sinEtapa">{{ t.etapaActual.nombre }}</span>
               <ng-template #sinEtapa><span class="cell-muted">—</span></ng-template>
+              <br *ngIf="t.etapaActual?.area" />
+              <small *ngIf="t.etapaActual?.area" class="cell-area">{{ t.etapaActual!.area }}</small>
             </td>
           </ng-container>
 
@@ -478,6 +480,7 @@ type Rol = 'ADMINISTRADOR' | 'FUNCIONARIO' | 'CLIENTE';
     .cell-primary { display: block; font-weight: 500; }
     .cell-secondary { display: block; font-size: 0.75rem; color: #757575; }
     .cell-muted { color: #bdbdbd; }
+    .cell-area { color: #757575; font-size: 11px; }
 
     /* Urgente */
     .urgente { color: #b71c1c; font-weight: 600; }

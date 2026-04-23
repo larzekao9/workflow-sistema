@@ -27,6 +27,9 @@ services:
       JWT_SECRET: workflow-dev-secret-key-change-in-production
       JWT_EXPIRATION: 86400000
       AI_SERVICE_URL: http://ai-service:8001
+      UPLOADS_DIR: /uploads
+    volumes:
+      - uploads_data:/uploads
     depends_on:
       - mongodb
     networks:
@@ -58,6 +61,7 @@ services:
 
 volumes:
   mongo_data:
+  uploads_data:
 
 networks:
   workflow-net:

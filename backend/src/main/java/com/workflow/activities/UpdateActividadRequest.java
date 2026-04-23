@@ -22,6 +22,10 @@ public class UpdateActividadRequest {
 
     private String formularioId;
 
+    private String cargoRequerido;
+
+    private String departmentId;
+
     @Valid
     private PosicionRequest posicion;
 

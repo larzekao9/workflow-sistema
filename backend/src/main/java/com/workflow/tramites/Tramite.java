@@ -52,6 +52,9 @@ public class Tramite {
 
         @Field("formulario_id")
         private String formularioId;
+
+        @Field("area")
+        private String area;
     }
 
     @Data

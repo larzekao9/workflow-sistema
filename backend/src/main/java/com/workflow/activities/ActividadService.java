@@ -67,6 +67,8 @@ public class ActividadService {
                 .tipo(request.getTipo())
                 .responsableRolId(request.getResponsableRolId())
                 .formularioId(request.getFormularioId())
+                .cargoRequerido(request.getCargoRequerido())
+                .departmentId(request.getDepartmentId())
                 .posicion(posicion != null ? posicion : Actividad.Posicion.builder().x(0.0).y(0.0).build())
                 .transiciones(transiciones)
                 .tiempoLimiteHoras(request.getTiempoLimiteHoras())
@@ -122,6 +124,12 @@ public class ActividadService {
         }
         if (request.getTiempoLimiteHoras() != null) {
             actividad.setTiempoLimiteHoras(request.getTiempoLimiteHoras());
+        }
+        if (request.getCargoRequerido() != null) {
+            actividad.setCargoRequerido(request.getCargoRequerido());
+        }
+        if (request.getDepartmentId() != null) {
+            actividad.setDepartmentId(request.getDepartmentId());
         }
 
         actividad.setActualizadoEn(LocalDateTime.now());
@@ -236,6 +244,8 @@ public class ActividadService {
                 .tipo(a.getTipo() != null ? a.getTipo().name() : null)
                 .responsableRolId(a.getResponsableRolId())
                 .formularioId(a.getFormularioId())
+                .cargoRequerido(a.getCargoRequerido())
+                .departmentId(a.getDepartmentId())
                 .posicion(posicion)
                 .transiciones(transiciones)
                 .tiempoLimiteHoras(a.getTiempoLimiteHoras())

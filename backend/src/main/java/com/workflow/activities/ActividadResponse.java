@@ -21,6 +21,8 @@ public class ActividadResponse {
     private String tipo;
     private String responsableRolId;
     private String formularioId;
+    private String cargoRequerido;
+    private String departmentId;
     private PosicionResponse posicion;
     private List<TransicionResponse> transiciones;
     private Integer tiempoLimiteHoras;

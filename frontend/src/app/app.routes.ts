@@ -21,6 +21,16 @@ export const routes: Routes = [
     loadComponent: () => import('./users/users.component').then(m => m.UsersComponent)
   },
   {
+    path: 'departments',
+    canActivate: [authGuard],
+    loadComponent: () => import('./departments/departments-list/departments-list.component').then(m => m.DepartmentsListComponent)
+  },
+  {
+    path: 'empresas',
+    canActivate: [authGuard],
+    loadComponent: () => import('./empresas/empresas-list/empresas-list.component').then(m => m.EmpresasListComponent)
+  },
+  {
     path: 'roles',
     canActivate: [authGuard],
     loadComponent: () => import('./roles/roles.component').then(m => m.RolesComponent)

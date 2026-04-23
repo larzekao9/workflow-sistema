@@ -31,5 +31,9 @@ public class CreateUserRequest {
     @NotBlank(message = "El rol es obligatorio")
     private String rolId;
 
-    private String departamento;
+    private String departmentId;
+
+    private String cargo;
+
+    private String empresaId;
 }
