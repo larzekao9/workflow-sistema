@@ -1,12 +1,13 @@
-import { Component, OnInit, ViewChild, AfterViewInit } from '@angular/core';
+import { Component, OnInit, ViewChild, AfterViewInit, Inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { ReactiveFormsModule, FormControl } from '@angular/forms';
 
 import { MatTableModule, MatTableDataSource } from '@angular/material/table';
 import { MatPaginatorModule, MatPaginator } from '@angular/material/paginator';
 import { MatSortModule, MatSort } from '@angular/material/sort';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatDialog, MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatCardModule } from '@angular/material/card';
@@ -14,11 +15,54 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatSelectModule } from '@angular/material/select';
 
 import { EmpresaService } from '../../shared/services/empresa.service';
+import { UserService } from '../../shared/services/user.service';
 import { Empresa } from '../../shared/models/empresa.model';
+import { User } from '../../shared/models/user.model';
 import { EmpresaFormDialogComponent } from '../empresa-form-dialog/empresa-form-dialog.component';
 import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/confirm-dialog.component';
+
+// ── Dialog asignar admin ──────────────────────────────────────────────────────
+interface AsignarAdminDialogData { empresa: Empresa; administradores: User[]; }
+
+@Component({
+  selector: 'app-asignar-admin-dialog',
+  standalone: true,
+  imports: [CommonModule, ReactiveFormsModule, MatButtonModule, MatDialogModule,
+            MatFormFieldModule, MatSelectModule, MatProgressSpinnerModule],
+  template: `
+    <h2 mat-dialog-title>Asignar administrador</h2>
+    <mat-dialog-content>
+      <p>Empresa: <strong>{{ data.empresa.nombre }}</strong></p>
+      <mat-form-field appearance="outline" style="width:100%;margin-top:8px">
+        <mat-label>Seleccioná un administrador</mat-label>
+        <mat-select [formControl]="ctrl">
+          <mat-option *ngFor="let u of data.administradores" [value]="u.id">
+            {{ u.nombreCompleto }} — {{ u.email }}
+          </mat-option>
+        </mat-select>
+      </mat-form-field>
+    </mat-dialog-content>
+    <mat-dialog-actions align="end">
+      <button mat-button mat-dialog-close>Cancelar</button>
+      <button mat-raised-button color="primary"
+        [disabled]="!ctrl.value"
+        (click)="confirmar()">Asignar</button>
+    </mat-dialog-actions>
+  `
+})
+export class AsignarAdminDialogComponent {
+  ctrl = new FormControl<string>('');
+  constructor(
+    public dialogRef: MatDialogRef<AsignarAdminDialogComponent>,
+    @Inject(MAT_DIALOG_DATA) public data: AsignarAdminDialogData
+  ) {
+    if (data.empresa.adminPrincipalId) this.ctrl.setValue(data.empresa.adminPrincipalId);
+  }
+  confirmar(): void { this.dialogRef.close(this.ctrl.value); }
+}
 
 @Component({
   selector: 'app-empresas-list',
@@ -37,7 +81,9 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/c
     MatChipsModule,
     MatTooltipModule,
     MatInputModule,
-    MatFormFieldModule
+    MatFormFieldModule,
+    MatSelectModule,
+    AsignarAdminDialogComponent
   ],
   template: `
     <div class="page-header">
@@ -102,9 +148,28 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/c
               </td>
             </ng-container>
 
+            <ng-container matColumnDef="adminPrincipal">
+              <th mat-header-cell *matHeaderCellDef>Administrador</th>
+              <td mat-cell *matCellDef="let empresa">
+                <span *ngIf="empresa.adminPrincipalNombre" class="admin-asignado">
+                  <mat-icon aria-hidden="true" class="admin-icon">person</mat-icon>
+                  {{ empresa.adminPrincipalNombre }}
+                </span>
+                <span *ngIf="!empresa.adminPrincipalNombre" class="admin-sin">Sin asignar</span>
+              </td>
+            </ng-container>
+
             <ng-container matColumnDef="acciones">
               <th mat-header-cell *matHeaderCellDef>Acciones</th>
               <td mat-cell *matCellDef="let empresa">
+                <button
+                  mat-icon-button
+                  color="accent"
+                  (click)="openAsignarAdminDialog(empresa)"
+                  [matTooltip]="'Asignar administrador a ' + empresa.nombre"
+                  [attr.aria-label]="'Asignar admin a ' + empresa.nombre">
+                  <mat-icon>manage_accounts</mat-icon>
+                </button>
                 <button
                   mat-icon-button
                   color="primary"
@@ -158,6 +223,9 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/c
     .loading-container { display: flex; justify-content: center; padding: 48px; }
     .no-data { text-align: center; padding: 24px; color: #888; }
     table { width: 100%; }
+    .admin-asignado { display: flex; align-items: center; gap: 4px; font-size: 0.875rem; color: #1565c0; }
+    .admin-icon { font-size: 16px; width: 16px; height: 16px; }
+    .admin-sin { font-size: 0.8rem; color: #9e9e9e; font-style: italic; }
 
     @media (max-width: 600px) {
       .page-header { flex-direction: column; align-items: flex-start; }
@@ -166,7 +234,7 @@ import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/c
   `]
 })
 export class EmpresasListComponent implements OnInit, AfterViewInit {
-  displayedColumns = ['nombre', 'razonSocial', 'ciudad', 'pais', 'activa', 'acciones'];
+  displayedColumns = ['nombre', 'razonSocial', 'ciudad', 'pais', 'activa', 'adminPrincipal', 'acciones'];
   dataSource = new MatTableDataSource<Empresa>();
   isLoading = false;
 
@@ -175,6 +243,7 @@ export class EmpresasListComponent implements OnInit, AfterViewInit {
 
   constructor(
     private empresaService: EmpresaService,
+    private userService: UserService,
     private dialog: MatDialog,
     private snackBar: MatSnackBar
   ) {}
@@ -213,6 +282,42 @@ export class EmpresasListComponent implements OnInit, AfterViewInit {
     if (this.dataSource.paginator) {
       this.dataSource.paginator.firstPage();
     }
+  }
+
+  openAsignarAdminDialog(empresa: Empresa): void {
+    this.userService.getAll().subscribe({
+      next: (users: User[]) => {
+        const administradores = users.filter(
+          u => (u.rolNombre ?? '').toUpperCase().includes('ADMIN') &&
+               !(u.rolNombre ?? '').toUpperCase().includes('SUPER')
+        );
+        if (administradores.length === 0) {
+          this.snackBar.open('No hay administradores disponibles', 'Cerrar', { duration: 3500 });
+          return;
+        }
+        const ref = this.dialog.open<AsignarAdminDialogComponent, AsignarAdminDialogData, string>(
+          AsignarAdminDialogComponent,
+          { width: '420px', data: { empresa, administradores } }
+        );
+        ref.afterClosed().subscribe(adminId => {
+          if (!adminId) return;
+          this.empresaService.asignarAdmin(empresa.id, adminId).subscribe({
+            next: (updated) => {
+              const idx = this.dataSource.data.findIndex(e => e.id === updated.id);
+              if (idx >= 0) {
+                const copy = [...this.dataSource.data];
+                copy[idx] = updated;
+                this.dataSource.data = copy;
+              }
+              this.snackBar.open('Administrador asignado correctamente', 'Cerrar', { duration: 3000 });
+            },
+            error: (err: { error?: { message?: string } }) =>
+              this.snackBar.open(err?.error?.message || 'Error al asignar', 'Cerrar', { duration: 4000 })
+          });
+        });
+      },
+      error: () => this.snackBar.open('Error al cargar usuarios', 'Cerrar', { duration: 4000 })
+    });
   }
 
   openCreateDialog(): void {

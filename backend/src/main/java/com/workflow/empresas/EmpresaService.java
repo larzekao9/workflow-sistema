@@ -1,18 +1,24 @@
 package com.workflow.empresas;
 
+import com.workflow.roles.RoleRepository;
 import com.workflow.shared.exception.BadRequestException;
 import com.workflow.shared.exception.ResourceNotFoundException;
+import com.workflow.users.User;
+import com.workflow.users.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
 public class EmpresaService {
 
     private final EmpresaRepository empresaRepository;
+    private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
 
     public List<EmpresaResponse> getAll() {
         return empresaRepository.findByActivaTrue()
@@ -75,6 +81,31 @@ public class EmpresaService {
         return toResponse(empresaRepository.save(empresa));
     }
 
+    public EmpresaResponse asignarAdmin(String empresaId, String adminId) {
+        Empresa empresa = empresaRepository.findById(Objects.requireNonNull(empresaId))
+                .orElseThrow(() -> new ResourceNotFoundException("Empresa no encontrada: " + empresaId));
+
+        User admin = userRepository.findById(Objects.requireNonNull(adminId))
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado: " + adminId));
+
+        String rolAdminId = roleRepository.findByNombre("ADMINISTRADOR")
+                .orElseThrow(() -> new BadRequestException("Rol ADMINISTRADOR no configurado"))
+                .getId();
+
+        if (!rolAdminId.equals(admin.getRolId())) {
+            throw new BadRequestException("El usuario seleccionado no tiene rol ADMINISTRADOR");
+        }
+
+        empresa.setAdminPrincipalId(adminId);
+        empresa.setActualizadoEn(LocalDateTime.now());
+        empresaRepository.save(empresa);
+
+        admin.setEmpresaId(empresaId);
+        userRepository.save(admin);
+
+        return toResponse(empresa);
+    }
+
     public void delete(String id) {
         Empresa empresa = empresaRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Empresa no encontrada: " + id));
@@ -85,6 +116,12 @@ public class EmpresaService {
     }
 
     private EmpresaResponse toResponse(Empresa empresa) {
+        String adminNombre = null;
+        if (empresa.getAdminPrincipalId() != null) {
+            adminNombre = userRepository.findById(empresa.getAdminPrincipalId())
+                    .map(User::getNombreCompleto)
+                    .orElse(null);
+        }
         return EmpresaResponse.builder()
                 .id(empresa.getId())
                 .nombre(empresa.getNombre())
@@ -97,6 +134,7 @@ public class EmpresaService {
                 .pais(empresa.getPais())
                 .activa(empresa.isActiva())
                 .adminPrincipalId(empresa.getAdminPrincipalId())
+                .adminPrincipalNombre(adminNombre)
                 .creadoEn(empresa.getCreadoEn())
                 .actualizadoEn(empresa.getActualizadoEn())
                 .build();

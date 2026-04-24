@@ -30,4 +30,8 @@ export class EmpresaService {
   delete(id: string): Observable<void> {
     return this.http.delete<void>(`${this.url}/${id}`);
   }
+
+  asignarAdmin(empresaId: string, adminId: string): Observable<Empresa> {
+    return this.http.post<Empresa>(`${this.url}/${empresaId}/asignar-admin`, { adminId });
+  }
 }

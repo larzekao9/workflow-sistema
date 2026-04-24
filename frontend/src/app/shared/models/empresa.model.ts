@@ -10,6 +10,7 @@ export interface Empresa {
   pais?: string;
   activa: boolean;
   adminPrincipalId?: string;
+  adminPrincipalNombre?: string;
   creadoEn?: string;
   actualizadoEn?: string;
 }

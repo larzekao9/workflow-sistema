@@ -24,6 +24,7 @@ public class EmpresaResponse {
     private String pais;
     private boolean activa;
     private String adminPrincipalId;
+    private String adminPrincipalNombre;
     private LocalDateTime creadoEn;
     private LocalDateTime actualizadoEn;
 }

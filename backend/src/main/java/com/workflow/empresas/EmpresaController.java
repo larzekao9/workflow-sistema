@@ -40,6 +40,14 @@ public class EmpresaController {
         return ResponseEntity.ok(empresaService.update(id, request));
     }
 
+    @PostMapping("/{id}/asignar-admin")
+    @PreAuthorize("hasAuthority('GESTIONAR_EMPRESAS')")
+    public ResponseEntity<EmpresaResponse> asignarAdmin(
+            @PathVariable String id,
+            @Valid @RequestBody AsignarAdminRequest request) {
+        return ResponseEntity.ok(empresaService.asignarAdmin(id, request.getAdminId()));
+    }
+
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('GESTIONAR_EMPRESAS')")
     public ResponseEntity<Void> delete(@PathVariable String id) {
