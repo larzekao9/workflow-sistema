@@ -26,8 +26,10 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatCardModule } from '@angular/material/card';
 import { MatListModule } from '@angular/material/list';
+import { MatExpansionModule } from '@angular/material/expansion';
 
 import { Form } from '@bpmn-io/form-js-viewer';
+import { environment } from '../../../environments/environment';
 
 import { TramiteService } from '../../shared/services/tramite.service';
 import { AuthService } from '../../shared/services/auth.service';
@@ -41,6 +43,8 @@ import {
   FormularioActualResponse,
   EstadoConfig,
   HistorialEntry,
+  RespuestaFormulario,
+  FileRef,
   estadoConfig as getEstadoConfig
 } from '../../shared/models/tramite.model';
 
@@ -238,7 +242,8 @@ export class AsignarFuncionarioDialogComponent {
     MatDividerModule,
     MatTooltipModule,
     MatCardModule,
-    MatListModule
+    MatListModule,
+    MatExpansionModule
   ],
   template: `
     <div class="detalle-shell">
@@ -632,6 +637,51 @@ export class AsignarFuncionarioDialogComponent {
               <mat-spinner diameter="32"></mat-spinner>
             </div>
             <div #formjsContainer class="formjs-canvas" [class.hidden]="isLoadingFormulario"></div>
+          </mat-card-content>
+        </mat-card>
+
+        <!-- ────────── Datos de etapas anteriores (todos los roles) ────────── -->
+        <mat-card *ngIf="respuestasFormulario.length > 0" class="respuestas-card">
+          <mat-card-header>
+            <mat-icon mat-card-avatar aria-hidden="true">assignment</mat-icon>
+            <mat-card-title>Datos de etapas anteriores</mat-card-title>
+          </mat-card-header>
+          <mat-card-content>
+            <mat-accordion>
+              <mat-expansion-panel
+                *ngFor="let r of respuestasFormulario"
+                [attr.aria-label]="'Datos de etapa: ' + r.actividadNombre">
+                <mat-expansion-panel-header>
+                  <mat-panel-title>{{ r.actividadNombre }}</mat-panel-title>
+                  <mat-panel-description>
+                    {{ r.usuarioNombre }} &middot; {{ r.timestamp | date:'dd/MM/yyyy HH:mm' }}
+                  </mat-panel-description>
+                </mat-expansion-panel-header>
+                <!-- Campos del formulario -->
+                <div class="campos-grid" *ngIf="(r.campos | keyvalue).length > 0">
+                  <div *ngFor="let campo of r.campos | keyvalue" class="campo-item">
+                    <span class="campo-key">{{ campo.key }}</span>
+                    <span class="campo-val">{{ campo.value }}</span>
+                  </div>
+                </div>
+                <p *ngIf="(r.campos | keyvalue).length === 0" class="campos-vacios">
+                  Sin datos de formulario registrados en esta etapa.
+                </p>
+                <!-- Archivos adjuntos -->
+                <div *ngIf="r.archivos?.length" class="archivos-adjuntos">
+                  <strong>Archivos adjuntos:</strong>
+                  <a
+                    *ngFor="let f of r.archivos"
+                    [href]="getFileUrl(f.fileId)"
+                    target="_blank"
+                    rel="noopener"
+                    class="archivo-link"
+                    [attr.aria-label]="'Descargar archivo: ' + f.nombre">
+                    <mat-icon aria-hidden="true">attach_file</mat-icon>{{ f.nombre }}
+                  </a>
+                </div>
+              </mat-expansion-panel>
+            </mat-accordion>
           </mat-card-content>
         </mat-card>
 
@@ -1130,6 +1180,81 @@ export class AsignarFuncionarioDialogComponent {
       border-left: 3px solid #1565c0;
       border-radius: 0 4px 4px 0;
     }
+
+    /* Respuestas de etapas anteriores */
+    .respuestas-card mat-card-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 1rem;
+    }
+
+    .campos-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .campo-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .campo-key {
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #616161;
+    }
+
+    .campo-val {
+      font-size: 0.875rem;
+      color: #212121;
+      word-break: break-word;
+    }
+
+    .campos-vacios {
+      font-size: 0.875rem;
+      color: #9e9e9e;
+      font-style: italic;
+      margin: 0 0 8px;
+    }
+
+    .archivos-adjuntos {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .archivos-adjuntos strong {
+      font-size: 0.875rem;
+      color: #424242;
+    }
+
+    .archivo-link {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      color: #1565c0;
+      font-size: 0.875rem;
+      text-decoration: none;
+    }
+
+    .archivo-link:hover,
+    .archivo-link:focus {
+      text-decoration: underline;
+      outline-offset: 2px;
+    }
+
+    .archivo-link mat-icon {
+      font-size: 16px;
+      width: 16px;
+      height: 16px;
+    }
   `]
 })
 export class TramiteDetalleComponent implements OnInit, OnDestroy {
@@ -1144,6 +1269,8 @@ export class TramiteDetalleComponent implements OnInit, OnDestroy {
 
   obsInlineControl = new FormControl('');
   apelacionObsControl = new FormControl('');
+  respuestasFormulario: RespuestaFormulario[] = [];
+  private formData: Record<string, unknown> = {};
 
   private viewer: Form | null = null;
   private readonly destroy$ = new Subject<void>();
@@ -1398,7 +1525,8 @@ export class TramiteDetalleComponent implements OnInit, OnDestroy {
     this.isActuando = true;
     const req: AvanzarTramiteRequest = {
       accion,
-      observaciones: obs || undefined
+      observaciones: obs || undefined,
+      camposFormulario: Object.keys(this.formData).length > 0 ? this.formData : undefined
     };
 
     this.tramiteService.avanzar(this.tramite.id, req)
@@ -1407,6 +1535,7 @@ export class TramiteDetalleComponent implements OnInit, OnDestroy {
         next: (updated) => {
           this.tramite = updated;
           this.isActuando = false;
+          this.formData = {};
           this.obsInlineControl.reset();
           this.destroyViewer();
           this.hasFormulario = false;
@@ -1442,6 +1571,11 @@ export class TramiteDetalleComponent implements OnInit, OnDestroy {
         if (t.etapaActual?.formularioId && (t.estado === 'INICIADO' || t.estado === 'EN_PROCESO')) {
           this.cargarFormulario(id);
         }
+
+        this.tramiteService.getRespuestas(id).pipe(takeUntil(this.destroy$)).subscribe({
+          next: (r) => { this.respuestasFormulario = r; this.cdr.detectChanges(); },
+          error: () => { /* silent — not critical */ }
+        });
       },
       error: (err: { error?: { message?: string } }) => {
         this.isLoading = false;
@@ -1481,9 +1615,21 @@ export class TramiteDetalleComponent implements OnInit, OnDestroy {
     if (!this.containerRef?.nativeElement) return;
     this.destroyViewer();
     this.viewer = new Form({ container: this.containerRef.nativeElement });
+    this.viewer.on('submit', (event: object) => {
+      const e = event as { data?: Record<string, unknown> };
+      this.formData = e.data ?? {};
+    });
+    this.viewer.on('changed', (event: object) => {
+      const e = event as { data?: Record<string, unknown> };
+      this.formData = e.data ?? {};
+    });
     this.viewer.importSchema(schema).catch((err: unknown) => {
       console.error('[TramiteDetalle] Error importando schema:', err);
     });
+  }
+
+  getFileUrl(fileId: string): string {
+    return `${environment.apiUrl}/files/${fileId}`;
   }
 
   private destroyViewer(): void {

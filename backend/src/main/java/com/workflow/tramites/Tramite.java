@@ -74,6 +74,10 @@ public class Tramite {
         @Field("actividad_bpmn_id")
         private String actividadBpmnId;
 
+        /** ID del documento Actividad en MongoDB (puede ser null si no hay mapeo). */
+        @Field("actividad_id")
+        private String actividadId;
+
         @Field("nombre")
         private String nombre;
 

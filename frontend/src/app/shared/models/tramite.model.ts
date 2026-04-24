@@ -67,6 +67,22 @@ export interface AvanzarTramiteRequest {
   accion: AccionTramite;
   observaciones?: string;
   formularioRespuesta?: Record<string, unknown>;
+  camposFormulario?: Record<string, unknown>;
+  archivosIds?: string[];
+}
+
+export interface RespuestaFormulario {
+  id: string;
+  tramiteId: string;
+  actividadId?: string;
+  actividadNombre: string;
+  usuarioId: string;
+  usuarioNombre: string;
+  rolUsuario: string;
+  campos: Record<string, unknown>;
+  archivos?: FileRef[];
+  accion: string;
+  timestamp: string;
 }
 
 export interface FormularioActualResponse {

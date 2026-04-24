@@ -1,4 +1,60 @@
 # Contrato de API — workflow-sistema
+
+## Sprint 4.1 — Persistencia de respuestas de formulario
+
+### GET /tramites/{id}/respuestas
+- **Auth:** Bearer JWT requerido
+- **Roles:** FUNCIONARIO, ADMINISTRADOR, SUPERADMIN
+- **Path param:** `id` — ID del trámite
+- **Response 200:**
+```json
+[
+  {
+    "id": "string",
+    "tramiteId": "string",
+    "actividadId": "string | null",
+    "actividadNombre": "string",
+    "usuarioId": "string",
+    "usuarioNombre": "string",
+    "rolUsuario": "string",
+    "campos": { "campo1": "valor1" },
+    "archivos": [{ "fileId": "string", "nombre": "string", "url": "string" }],
+    "accion": "string",
+    "timestamp": "2026-04-24T12:00:00"
+  }
+]
+```
+- **Response 404:** Trámite no encontrado
+
+---
+
+### POST /tramites/{id}/responder — actualizado Sprint 4.1
+Campos adicionales opcionales en el body:
+```json
+{
+  "observaciones": "string",
+  "camposFormulario": { "campo1": "valor1" },
+  "archivosIds": ["fileId1", "fileId2"]
+}
+```
+- Si `camposFormulario` está presente y no vacío, se persiste una `RespuestaFormulario` en la colección `respuestas_formulario`.
+- Comportamiento existente (cambio de estado DEVUELTO → EN_PROCESO) no se altera.
+
+---
+
+### POST /tramites/{id}/avanzar — actualizado Sprint 4.1
+Campos adicionales opcionales en el body:
+```json
+{
+  "accion": "APROBAR | RECHAZAR | DEVOLVER | ESCALAR",
+  "observaciones": "string",
+  "camposFormulario": { "campo1": "valor1" },
+  "archivosIds": ["fileId1", "fileId2"]
+}
+```
+- Campo `formularioRespuesta` eliminado (era dead code, nunca fue persistido).
+- Si `camposFormulario` está presente y no vacío, se persiste una `RespuestaFormulario` vinculada a la etapa que se estaba procesando (snapshot pre-avance).
+
 Base URL: `http://localhost:8080`
 Auth: Bearer JWT en header `Authorization` (excepto /auth/*)
 Última actualización: 2026-04-15 | Sprint 2.8 completado

@@ -13,6 +13,7 @@ import com.workflow.shared.exception.BadRequestException;
 import com.workflow.shared.exception.ResourceNotFoundException;
 import com.workflow.users.User;
 import com.workflow.users.UserRepository;
+import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -25,6 +26,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -39,6 +41,7 @@ public class TramiteService {
     private final BpmnMotorService bpmnMotorService;
     private final ActividadRepository actividadRepository;
     private final FileStorageService fileStorageService;
+    private final RespuestaFormularioRepository respuestaFormularioRepository;
 
     // -----------------------------------------------------------------------
     // Crear trámite
@@ -296,6 +299,11 @@ public class TramiteService {
         String actividadActualNombre = tramite.getEtapaActual() != null
                 ? tramite.getEtapaActual().getNombre()
                 : "desconocido";
+        // Captura el actividadId del documento Actividad ANTES del switch, porque procesarAprobacion
+        // puede mutar etapaActual apuntando ya a la siguiente etapa.
+        String actividadDocId = tramite.getEtapaActual() != null
+                ? tramite.getEtapaActual().getActividadId()
+                : null;
 
         LocalDateTime ahora = LocalDateTime.now();
 
@@ -326,6 +334,30 @@ public class TramiteService {
         }
 
         tramite.setActualizadoEn(ahora);
+
+        // Persiste datos del formulario si fueron enviados (side-effect opcional)
+        Map<String, Object> camposAvanzar = req.getCamposFormulario();
+        if (camposAvanzar != null && !camposAvanzar.isEmpty()) {
+            List<FileReference> archivosAvanzar = resolveFileReferences(
+                    req.getArchivosIds() != null ? req.getArchivosIds() : List.of());
+            String rolResponsable = resolverRolNombrePorId(responsableId);
+            RespuestaFormulario respuestaAvanzar = RespuestaFormulario.builder()
+                    .tramiteId(tramiteId)
+                    .actividadId(actividadDocId)
+                    .actividadNombre(actividadActualNombre)
+                    .usuarioId(responsableId)
+                    .usuarioNombre(responsableNombre)
+                    .rolUsuario(rolResponsable)
+                    .campos(camposAvanzar)
+                    .archivos(archivosAvanzar)
+                    .accion(req.getAccion().name())
+                    .timestamp(ahora)
+                    .build();
+            respuestaFormularioRepository.save(respuestaAvanzar);
+            log.debug("[TramiteService] RespuestaFormulario guardada para trámite {} (avanzar, accion={})",
+                    tramiteId, req.getAccion());
+        }
+
         return TramiteResponse.fromDocument(tramiteRepository.save(tramite));
     }
 
@@ -362,7 +394,7 @@ public class TramiteService {
     // Responder trámite (cliente corrige tras DEVUELTO)
     // -----------------------------------------------------------------------
 
-    public TramiteResponse responderTramite(String tramiteId, String clienteId, String observaciones) {
+    public TramiteResponse responderTramite(String tramiteId, String clienteId, ResponderTramiteRequest req) {
         Tramite tramite = tramiteRepository.findById(tramiteId)
                 .orElseThrow(() -> new ResourceNotFoundException("Trámite no encontrado: " + tramiteId));
 
@@ -376,6 +408,7 @@ public class TramiteService {
 
         String clienteNombre = resolverNombreUsuario(clienteId);
         LocalDateTime ahora = LocalDateTime.now();
+        String observaciones = req != null ? req.getObservaciones() : null;
 
         tramite.setEstado(Tramite.EstadoTramite.EN_PROCESO);
         agregarHistorial(tramite,
@@ -383,6 +416,28 @@ public class TramiteService {
                 tramite.getEtapaActual() != null ? tramite.getEtapaActual().getNombre() : null,
                 clienteId, clienteNombre, "RESPONDIDO_POR_CLIENTE", observaciones, ahora);
         tramite.setActualizadoEn(ahora);
+
+        // Persiste datos del formulario si fueron enviados (side-effect opcional)
+        Map<String, Object> campos = req != null ? req.getCamposFormulario() : null;
+        if (campos != null && !campos.isEmpty()) {
+            List<FileReference> archivos = resolveFileReferences(
+                    req.getArchivosIds() != null ? req.getArchivosIds() : List.of());
+            RespuestaFormulario respuesta = RespuestaFormulario.builder()
+                    .tramiteId(tramiteId)
+                    .actividadId(tramite.getEtapaActual() != null ? tramite.getEtapaActual().getActividadId() : null)
+                    .actividadNombre(tramite.getEtapaActual() != null
+                            ? tramite.getEtapaActual().getNombre() : "Sin etapa")
+                    .usuarioId(clienteId)
+                    .usuarioNombre(clienteNombre)
+                    .rolUsuario("CLIENTE")
+                    .campos(campos)
+                    .archivos(archivos)
+                    .accion("RESPONDIDO_POR_CLIENTE")
+                    .timestamp(ahora)
+                    .build();
+            respuestaFormularioRepository.save(respuesta);
+            log.debug("[TramiteService] RespuestaFormulario guardada para trámite {} (responder)", tramiteId);
+        }
 
         log.info("[TramiteService] Trámite {} respondido por cliente {}", tramiteId, clienteId);
         return TramiteResponse.fromDocument(tramiteRepository.save(tramite));
@@ -544,9 +599,9 @@ public class TramiteService {
      * Intenta asignar el funcionario de menor carga al trámite dado.
      *
      * Lógica:
-     * 1. Busca la Actividad por politicaId + nombre del task BPMN para obtener departmentId y cargoRequerido.
-     * 2. Si no hay departmentId o cargoRequerido configurados en la actividad, no asigna (falla silenciosa).
-     * 3. Busca funcionarios activos con empresa + departamento + cargo coincidentes.
+     * 1. Busca la Actividad por politicaId + nombre del task BPMN para obtener departmentId.
+     * 2. Si no hay departmentId configurado en la actividad, no asigna (falla silenciosa).
+     * 3. Busca funcionarios activos con empresa + departamento coincidentes.
      * 4. Filtra solo los que tengan rol FUNCIONARIO.
      * 5. Si ninguno → estado SIN_ASIGNAR.
      * 6. Si uno → asigna directo.
@@ -568,12 +623,10 @@ public class TramiteService {
         }
 
         String departmentId = actividad.getDepartmentId();
-        String cargoRequerido = actividad.getCargoRequerido();
 
-        // 2. Si no están configurados los criterios, no asignar (sin error)
-        if (departmentId == null || departmentId.isBlank()
-                || cargoRequerido == null || cargoRequerido.isBlank()) {
-            log.debug("[AsignacionAuto] Actividad '{}' sin departmentId/cargoRequerido configurado — sin asignación automática",
+        // 2. Si no está configurado departmentId, no asignar (sin error)
+        if (departmentId == null || departmentId.isBlank()) {
+            log.debug("[AsignacionAuto] Actividad '{}' sin departmentId configurado — sin asignación automática",
                     bpmnTaskNombre);
             return;
         }
@@ -583,17 +636,14 @@ public class TramiteService {
                 .map(User::getEmpresaId)
                 .orElse(null);
 
-        // 3. Busca candidatos: empresa + departamento + cargo + activo
+        // 3. Busca candidatos: empresa + departamento + activo
         List<User> candidatos;
         if (empresaId != null && !empresaId.isBlank()) {
-            candidatos = userRepository.findByEmpresaIdAndDepartmentIdAndCargoAndActivoTrue(
-                    empresaId, departmentId, cargoRequerido);
+            candidatos = userRepository.findByEmpresaIdAndDepartmentIdAndActivoTrue(
+                    Objects.requireNonNull(empresaId), departmentId);
         } else {
-            // Sin empresa definida: filtra solo por departamento + cargo (instalación sin multi-tenant)
-            candidatos = userRepository.findByDepartmentIdAndActivoTrue(departmentId)
-                    .stream()
-                    .filter(u -> cargoRequerido.equalsIgnoreCase(u.getCargo()))
-                    .toList();
+            // Sin empresa definida: filtra solo por departamento (sin multi-tenant)
+            candidatos = userRepository.findByDepartmentIdAndActivoTrue(departmentId);
         }
 
         // 4. Filtra solo los que tengan rol FUNCIONARIO
@@ -611,8 +661,8 @@ public class TramiteService {
         if (candidatos.isEmpty()) {
             // 5. Sin candidatos → marcar como SIN_ASIGNAR
             tramite.setEstado(Tramite.EstadoTramite.SIN_ASIGNAR);
-            log.warn("[AsignacionAuto] Trámite {} marcado SIN_ASIGNAR — ningún funcionario con dept={} cargo='{}'",
-                    tramite.getId(), departmentId, cargoRequerido);
+            log.warn("[AsignacionAuto] Trámite {} marcado SIN_ASIGNAR — ningún funcionario con dept={}",
+                    tramite.getId(), departmentId);
             return;
         }
 
@@ -635,7 +685,7 @@ public class TramiteService {
         agregarHistorial(tramite, bpmnTaskId, bpmnTaskNombre,
                 elegido.getId(), tramite.getAsignadoANombre(),
                 "ASIGNADO_AUTO",
-                "Asignación automática por menor carga (dept=" + departmentId + ", cargo=" + cargoRequerido + ")",
+                "Asignación automática por menor carga (dept=" + departmentId + ")",
                 ahora);
 
         log.info("[AsignacionAuto] Trámite {} asignado automáticamente a {} ({})",
@@ -703,6 +753,35 @@ public class TramiteService {
 
         log.info("[TramiteService] Trámite {} asignado manualmente a {} por administrador", tramiteId, funcionarioId);
         return TramiteResponse.fromDocument(tramiteRepository.save(tramite));
+    }
+
+    // -----------------------------------------------------------------------
+    // Sprint 4.1 — Persistencia de respuestas de formulario
+    // -----------------------------------------------------------------------
+
+    /**
+     * Retorna todas las respuestas de formulario asociadas a un trámite, ordenadas cronológicamente.
+     * Retorna DTOs, nunca expone el Document directamente.
+     */
+    public List<RespuestaFormularioResponse> getRespuestas(String tramiteId) {
+        // Verifica que el trámite existe antes de devolver las respuestas
+        if (!tramiteRepository.existsById(tramiteId)) {
+            throw new ResourceNotFoundException("Trámite no encontrado: " + tramiteId);
+        }
+        return respuestaFormularioRepository.findByTramiteIdOrderByTimestampAsc(tramiteId)
+                .stream()
+                .map(RespuestaFormularioResponse::fromDocument)
+                .toList();
+    }
+
+    /**
+     * Resuelve el nombre del rol del usuario a partir de su ID.
+     * Usado al registrar la RespuestaFormulario al avanzar un trámite.
+     */
+    private String resolverRolNombrePorId(String userId) {
+        return userRepository.findById(userId)
+                .map(this::resolverRolNombre)
+                .orElse("DESCONOCIDO");
     }
 
     // -----------------------------------------------------------------------

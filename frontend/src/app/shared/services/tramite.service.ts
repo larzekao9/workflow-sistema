@@ -9,7 +9,8 @@ import {
   AvanzarTramiteRequest,
   FormularioActualResponse,
   TramiteStats,
-  Apelacion
+  Apelacion,
+  RespuestaFormulario
 } from '../models/tramite.model';
 
 @Injectable({ providedIn: 'root' })
@@ -98,6 +99,10 @@ export class TramiteService {
 
   getApelacion(id: string): Observable<Apelacion> {
     return this.http.get<Apelacion>(`${this.base}/${id}/apelacion`);
+  }
+
+  getRespuestas(tramiteId: string): Observable<RespuestaFormulario[]> {
+    return this.http.get<RespuestaFormulario[]>(`${this.base}/${tramiteId}/respuestas`);
   }
 
   getMisTramites(

@@ -29,6 +29,7 @@ import { AuthService } from '../../shared/services/auth.service';
 import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/confirm-dialog.component';
 import { Politica } from '../../shared/models/politica.model';
 import { Actividad, AccionPermitida } from '../../shared/models/actividad.model';
+import { CampoFormulario, TipoCampo, FormularioResponse, CreateFormularioRequest, UpdateFormularioRequest } from '../../shared/models/formulario.model';
 import { CollaborationService } from '../../shared/services/collaboration.service';
 import { Collaborator } from '../../shared/models/collaborator.model';
 import { BpmnUpdate } from '../../shared/services/collaboration.service';
@@ -275,6 +276,28 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
           </button>
         </div>
 
+        <!-- Tabs: Propiedades | Formulario -->
+        <div class="task-props-tabs" role="tablist">
+          <button class="task-props-tab"
+                  [class.active]="propsPanelTab === 'props'"
+                  (click)="switchPropsTab('props')"
+                  role="tab"
+                  [attr.aria-selected]="propsPanelTab === 'props'"
+                  aria-controls="tab-props">
+            <mat-icon style="font-size:16px;width:16px;height:16px">tune</mat-icon>
+            Propiedades
+          </button>
+          <button class="task-props-tab"
+                  [class.active]="propsPanelTab === 'formulario'"
+                  (click)="switchPropsTab('formulario')"
+                  role="tab"
+                  [attr.aria-selected]="propsPanelTab === 'formulario'"
+                  aria-controls="tab-formulario">
+            <mat-icon style="font-size:16px;width:16px;height:16px">assignment</mat-icon>
+            Formulario
+          </button>
+        </div>
+
         <!-- Loading overlay while saving -->
         <div class="task-props-saving" *ngIf="isSavingProps" aria-live="polite" aria-label="Guardando propiedades">
           <mat-spinner diameter="20"></mat-spinner>
@@ -282,7 +305,9 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
         </div>
 
         <!-- Form body — scrollable -->
-        <div class="task-props-body" [formGroup]="propsForm">
+        <div class="task-props-body" [formGroup]="propsForm"
+             *ngIf="propsPanelTab === 'props'"
+             id="tab-props" role="tabpanel">
 
           <!-- Nombre -->
           <mat-form-field appearance="outline" class="task-props-field">
@@ -391,16 +416,90 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
 
         </div><!-- /task-props-body -->
 
+        <!-- Tab Formulario — Sprint 4.3 -->
+        <div class="task-props-body task-props-form-tab"
+             *ngIf="propsPanelTab === 'formulario'"
+             id="tab-formulario" role="tabpanel">
+
+          <div *ngIf="isLoadingFormTab" style="display:flex;justify-content:center;padding:32px">
+            <mat-spinner diameter="32"></mat-spinner>
+          </div>
+
+          <ng-container *ngIf="!isLoadingFormTab">
+
+            <div *ngIf="!propsForm.get('formularioId')?.value && formCampos.length === 0"
+                 class="task-props-form-empty">
+              <mat-icon style="font-size:40px;width:40px;height:40px;color:#bbb">assignment_late</mat-icon>
+              <span>Sin formulario vinculado</span>
+              <button mat-stroked-button (click)="addCampo()">
+                <mat-icon>add</mat-icon> Crear formulario
+              </button>
+            </div>
+
+            <ng-container *ngIf="propsForm.get('formularioId')?.value || formCampos.length > 0">
+              <div class="task-props-section-divider">Campos del formulario</div>
+
+              <div *ngFor="let campo of formCampos; let i = index" class="form-campo-row">
+                <input class="form-campo-input"
+                       [(ngModel)]="campo.nombre"
+                       [ngModelOptions]="{standalone: true}"
+                       placeholder="nombre_campo"
+                       [attr.aria-label]="'Nombre del campo ' + (i + 1)" />
+                <input class="form-campo-input"
+                       [(ngModel)]="campo.etiqueta"
+                       [ngModelOptions]="{standalone: true}"
+                       placeholder="Etiqueta"
+                       [attr.aria-label]="'Etiqueta del campo ' + (i + 1)" />
+                <select class="form-campo-select"
+                        [(ngModel)]="campo.tipo"
+                        [ngModelOptions]="{standalone: true}"
+                        [attr.aria-label]="'Tipo del campo ' + (i + 1)">
+                  <option value="TEXT">Texto</option>
+                  <option value="NUMBER">Número</option>
+                  <option value="DATE">Fecha</option>
+                  <option value="FILE">Archivo</option>
+                  <option value="SELECT">Selección</option>
+                  <option value="TEXTAREA">Área de texto</option>
+                  <option value="EMAIL">Email</option>
+                  <option value="BOOLEAN">Sí/No</option>
+                </select>
+                <label class="form-campo-req" [title]="'Obligatorio'">
+                  <input type="checkbox"
+                         [(ngModel)]="campo.obligatorio"
+                         [ngModelOptions]="{standalone: true}"
+                         [attr.aria-label]="'Campo ' + (i + 1) + ' obligatorio'" />
+                  *
+                </label>
+                <button mat-icon-button
+                        color="warn"
+                        (click)="removeCampo(i)"
+                        style="width:28px;height:28px;line-height:28px"
+                        [attr.aria-label]="'Eliminar campo ' + (i + 1)">
+                  <mat-icon style="font-size:16px;width:16px;height:16px">delete</mat-icon>
+                </button>
+              </div>
+
+              <button mat-stroked-button
+                      style="margin-top:8px;width:100%"
+                      (click)="addCampo()">
+                <mat-icon>add</mat-icon> Agregar campo
+              </button>
+            </ng-container>
+
+          </ng-container>
+        </div>
+
         <!-- Footer actions -->
         <div class="task-props-footer">
           <button mat-stroked-button
                   (click)="closePropertiesPanel()"
                   class="task-props-cancel-btn"
-                  [disabled]="isSavingProps">
+                  [disabled]="isSavingProps || isSavingFormTab">
             Cancelar
           </button>
           <button mat-raised-button
                   color="primary"
+                  *ngIf="propsPanelTab === 'props'"
                   (click)="saveTaskProperties()"
                   class="task-props-save-btn"
                   [disabled]="isSavingProps || propsForm.invalid"
@@ -408,6 +507,17 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
             <mat-spinner *ngIf="isSavingProps" diameter="16" style="display:inline-flex;margin-right:4px"></mat-spinner>
             <mat-icon *ngIf="!isSavingProps">save</mat-icon>
             Guardar
+          </button>
+          <button mat-raised-button
+                  color="primary"
+                  *ngIf="propsPanelTab === 'formulario'"
+                  (click)="saveFormularioTab()"
+                  class="task-props-save-btn"
+                  [disabled]="isSavingFormTab || formCampos.length === 0"
+                  aria-label="Guardar formulario">
+            <mat-spinner *ngIf="isSavingFormTab" diameter="16" style="display:inline-flex;margin-right:4px"></mat-spinner>
+            <mat-icon *ngIf="!isSavingFormTab">save</mat-icon>
+            Guardar formulario
           </button>
         </div>
 
@@ -956,6 +1066,93 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
       font-size: 13px !important;
       height: 36px !important;
     }
+    /* ── Tab Formulario — Sprint 4.3 ─────────────────────────── */
+    .task-props-tabs {
+      display: flex;
+      border-bottom: 1px solid #e0e0e0;
+      flex-shrink: 0;
+    }
+    .task-props-tab {
+      flex: 1;
+      padding: 8px 4px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      color: #666;
+      border-bottom: 2px solid transparent;
+      transition: color 0.2s, border-bottom-color 0.2s;
+    }
+    .task-props-tab:focus-visible {
+      outline: 2px solid #1565c0;
+      outline-offset: -2px;
+    }
+    .task-props-tab.active {
+      color: #1565c0;
+      border-bottom-color: #1565c0;
+      font-weight: 500;
+    }
+    .task-props-form-tab {
+      padding: 12px;
+      overflow-y: auto;
+    }
+    .task-props-form-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 32px 16px;
+      color: #999;
+      text-align: center;
+    }
+    .form-campo-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 6px;
+    }
+    .form-campo-input {
+      flex: 1;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 4px 6px;
+      font-size: 12px;
+      min-width: 0;
+      min-height: 28px;
+      box-sizing: border-box;
+    }
+    .form-campo-input:focus {
+      outline: 2px solid #1565c0;
+      border-color: #1565c0;
+    }
+    .form-campo-select {
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 4px;
+      font-size: 12px;
+      max-width: 90px;
+      min-height: 28px;
+      box-sizing: border-box;
+    }
+    .form-campo-select:focus {
+      outline: 2px solid #1565c0;
+      border-color: #1565c0;
+    }
+    .form-campo-req {
+      display: flex;
+      align-items: center;
+      font-size: 16px;
+      color: #e53935;
+      cursor: pointer;
+      user-select: none;
+      flex-shrink: 0;
+    }
+    .form-campo-req input[type=checkbox] { margin-right: 2px; }
+
     /* Responsive */
     @media (max-width: 768px) {
       .task-props-panel {
@@ -1000,6 +1197,13 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
   isSavingProps = false;
   isLoadingDepts = false;
   isLoadingForms = false;
+
+  // --- Tab Formulario — Sprint 4.3 ---
+  propsPanelTab: 'props' | 'formulario' = 'props';
+  formCampos: Array<{ nombre: string; etiqueta: string; tipo: TipoCampo; obligatorio: boolean }> = [];
+  isLoadingFormTab = false;
+  isSavingFormTab = false;
+  private loadedFormularioId: string | null = null;
 
   propsForm!: FormGroup;
   departmentsList: { id: string; nombre: string }[] = [];
@@ -1200,6 +1404,25 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
           this.selectedActividad = null;
           this.selectedElementName = '';
           this.cdr.detectChanges();
+        });
+
+        // Sprint 4.2: auto-map UserTask al departamento del Lane padre
+        this.modeler.on('shape.changed', (e: any) => {
+          const el = e.element;
+          if ((el.type ?? '') !== 'bpmn:UserTask') return;
+          const parentEl = el.parent;
+          if (!parentEl || parentEl.type !== 'bpmn:Lane') return;
+          const laneName: string = (parentEl.businessObject?.name as string) ?? '';
+          if (!laneName) return;
+          const dept = (this.departmentsList ?? []).find(
+            (d: any) => d.nombre?.trim().toLowerCase() === laneName.trim().toLowerCase()
+          );
+          if (!dept) return;
+          if ((this.selectedElement as any)?.id === el.id) {
+            this.propsForm.patchValue({ area: dept.id }, { emitEvent: false });
+            this.onAreaChange(dept.id);
+            this.cdr.detectChanges();
+          }
         });
       }
 
@@ -1626,10 +1849,24 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
     if (matchedActividad) {
       // Use backend data as source of truth
       const areaId = matchedActividad.departmentId ?? '';
+
+      // Si la actividad no tiene departmentId pero el elemento está en un Lane, usar el lane
+      let resolvedAreaId = areaId;
+      if (!resolvedAreaId) {
+        const parentEl = (el as any).parent;
+        if (parentEl?.type === 'bpmn:Lane') {
+          const laneName: string = (parentEl.businessObject?.name as string) ?? '';
+          const deptFromLane = (this.departmentsList ?? []).find(
+            (d: any) => d.nombre?.trim().toLowerCase() === laneName.trim().toLowerCase()
+          );
+          if (deptFromLane) resolvedAreaId = deptFromLane.id;
+        }
+      }
+
       this.propsForm.patchValue({
         nombre:            matchedActividad.nombre ?? boName,
         descripcion:       matchedActividad.descripcion ?? '',
-        area:              areaId,
+        area:              resolvedAreaId,
         cargoRequerido:    matchedActividad.cargoRequerido ?? '',
         formularioId:      matchedActividad.formularioId ?? docFormId,
         slaHoras:          matchedActividad.tiempoLimiteHoras ?? null,
@@ -1637,8 +1874,8 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
       }, { emitEvent: false });
 
       // Load cargos for the area if one is set
-      if (areaId) {
-        this.loadCargosForArea(areaId);
+      if (resolvedAreaId) {
+        this.loadCargosForArea(resolvedAreaId);
       } else {
         this.cargosList = [];
       }
@@ -1653,7 +1890,21 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
         slaHoras:          null,
         accionesPermitidas: []
       }, { emitEvent: false });
-      this.cargosList = [];
+
+      // Aunque no hay actividad en backend, auto-detectar lane
+      const parentElFallback = (el as any).parent;
+      if (parentElFallback?.type === 'bpmn:Lane') {
+        const laneNameFb: string = (parentElFallback.businessObject?.name as string) ?? '';
+        const deptFb = (this.departmentsList ?? []).find(
+          (d: any) => d.nombre?.trim().toLowerCase() === laneNameFb.trim().toLowerCase()
+        );
+        if (deptFb) {
+          this.propsForm.patchValue({ area: deptFb.id }, { emitEvent: false });
+          this.loadCargosForArea(deptFb.id);
+        }
+      } else {
+        this.cargosList = [];
+      }
     }
 
     this.cdr.detectChanges();
@@ -1682,11 +1933,128 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
     });
   }
 
+  // ── Tab Formulario — Sprint 4.3 ────────────────────────────
+
+  switchPropsTab(tab: 'props' | 'formulario'): void {
+    this.propsPanelTab = tab;
+    if (tab === 'formulario') {
+      const fId = this.propsForm.get('formularioId')?.value as string;
+      if (fId && fId !== this.loadedFormularioId) {
+        this.loadFormularioTab(fId);
+      } else if (!fId) {
+        this.formCampos = [];
+        this.loadedFormularioId = null;
+      }
+    }
+    this.cdr.detectChanges();
+  }
+
+  private loadFormularioTab(formularioId: string): void {
+    this.isLoadingFormTab = true;
+    this.cdr.detectChanges();
+    this.formularioService.getById(formularioId).pipe(takeUntil(this.destroy$)).subscribe({
+      next: (f) => {
+        this.loadedFormularioId = f.id;
+        const allCampos: CampoFormulario[] = f.secciones?.flatMap(s => s.campos) ?? [];
+        this.formCampos = allCampos.map(c => ({
+          nombre: c.nombre,
+          etiqueta: c.etiqueta,
+          tipo: c.tipo,
+          obligatorio: c.obligatorio
+        }));
+        this.isLoadingFormTab = false;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.isLoadingFormTab = false;
+        this.snackBar.open('Error al cargar el formulario', 'Cerrar', { duration: 3000 });
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  addCampo(): void {
+    this.formCampos = [...this.formCampos, { nombre: '', etiqueta: '', tipo: 'TEXT', obligatorio: false }];
+    this.cdr.detectChanges();
+  }
+
+  removeCampo(idx: number): void {
+    this.formCampos = this.formCampos.filter((_, i) => i !== idx);
+    this.cdr.detectChanges();
+  }
+
+  saveFormularioTab(): void {
+    if (this.isSavingFormTab) return;
+    const campos = this.formCampos.filter(c => c.nombre.trim());
+    if (campos.length === 0) {
+      this.snackBar.open('Agregá al menos un campo', 'Cerrar', { duration: 3000 });
+      return;
+    }
+    const seccion = {
+      titulo: 'Principal',
+      orden: 1,
+      campos: campos.map((c, i) => ({
+        id: '',
+        nombre: c.nombre.trim(),
+        etiqueta: c.etiqueta.trim() || c.nombre.trim(),
+        tipo: c.tipo,
+        obligatorio: c.obligatorio,
+        orden: i + 1
+      }))
+    };
+    this.isSavingFormTab = true;
+    this.cdr.detectChanges();
+
+    const existingId = this.propsForm.get('formularioId')?.value as string;
+    const actividadNombre = this.selectedActividad?.nombre || this.selectedElementName || 'Formulario';
+
+    if (existingId) {
+      const req: UpdateFormularioRequest = { secciones: [seccion] };
+      this.formularioService.update(existingId, req).pipe(takeUntil(this.destroy$)).subscribe({
+        next: (f) => this.onFormularioSaved(f),
+        error: () => this.onFormularioSaveError()
+      });
+    } else {
+      const req: CreateFormularioRequest = {
+        nombre: actividadNombre,
+        descripcion: `Formulario del paso ${actividadNombre}`,
+        secciones: [seccion]
+      };
+      this.formularioService.create(req).pipe(takeUntil(this.destroy$)).subscribe({
+        next: (f) => {
+          this.propsForm.patchValue({ formularioId: f.id }, { emitEvent: false });
+          if (this.selectedActividad?.id) {
+            this.actividadService.updatePropiedades(this.selectedActividad.id, { formularioId: f.id })
+              .pipe(takeUntil(this.destroy$)).subscribe();
+          }
+          this.onFormularioSaved(f);
+        },
+        error: () => this.onFormularioSaveError()
+      });
+    }
+  }
+
+  private onFormularioSaved(f: FormularioResponse): void {
+    this.loadedFormularioId = f.id;
+    this.isSavingFormTab = false;
+    this.snackBar.open('Formulario guardado', 'Cerrar', { duration: 2500 });
+    this.cdr.detectChanges();
+  }
+
+  private onFormularioSaveError(): void {
+    this.isSavingFormTab = false;
+    this.snackBar.open('Error al guardar el formulario', 'Cerrar', { duration: 4000 });
+    this.cdr.detectChanges();
+  }
+
   closePropertiesPanel(): void {
     this.selectedElement = null;
     this.selectedActividad = null;
     this.selectedElementName = '';
     this.cargosList = [];
+    this.propsPanelTab = 'props';
+    this.formCampos = [];
+    this.loadedFormularioId = null;
     this.cdr.detectChanges();
   }
 

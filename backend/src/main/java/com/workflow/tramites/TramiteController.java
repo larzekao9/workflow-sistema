@@ -13,6 +13,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @Slf4j
 @RestController
 @RequestMapping("/tramites")
@@ -110,9 +112,18 @@ public class TramiteController {
             @PathVariable String id,
             @RequestBody(required = false) ResponderTramiteRequest request) {
         String clienteId = resolverUsuarioActualId();
-        String observaciones = request != null ? request.getObservaciones() : null;
-        TramiteResponse response = tramiteService.responderTramite(id, clienteId, observaciones);
+        TramiteResponse response = tramiteService.responderTramite(id, clienteId, request);
         return ResponseEntity.ok(response);
+    }
+
+    // -----------------------------------------------------------------------
+    // GET /tramites/{id}/respuestas — Respuestas de formulario del trámite
+    // -----------------------------------------------------------------------
+
+    @GetMapping("/{id}/respuestas")
+    @PreAuthorize("hasAnyAuthority('FUNCIONARIO','ADMINISTRADOR','SUPERADMIN')")
+    public ResponseEntity<List<RespuestaFormularioResponse>> getRespuestas(@PathVariable String id) {
+        return ResponseEntity.ok(tramiteService.getRespuestas(id));
     }
 
     // -----------------------------------------------------------------------
