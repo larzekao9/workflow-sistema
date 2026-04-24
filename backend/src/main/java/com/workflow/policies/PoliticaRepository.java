@@ -22,4 +22,7 @@ public interface PoliticaRepository extends MongoRepository<Politica, String> {
     Page<Politica> findByVersionPadreId(String versionPadreId, Pageable pageable);
 
     long countByEstadoAndNombre(Politica.EstadoPolitica estado, String nombre);
+
+    // Portal cliente — solo políticas activas (públicamente iniciables)
+    Page<Politica> findByEstadoIn(List<Politica.EstadoPolitica> estados, Pageable pageable);
 }

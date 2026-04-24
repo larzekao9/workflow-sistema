@@ -111,6 +111,11 @@ export const routes: Routes = [
     loadComponent: () => import('./tramites/tramite-detalle/tramite-detalle.component').then(m => m.TramiteDetalleComponent)
   },
   {
+    path: 'mis-tramites',
+    canActivate: [authGuard],
+    loadComponent: () => import('./mis-tramites/mis-tramites.component').then(m => m.MisTramitesComponent)
+  },
+  {
     path: '',
     redirectTo: 'dashboard',
     pathMatch: 'full'

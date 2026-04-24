@@ -116,6 +116,20 @@ public class TramiteController {
     }
 
     // -----------------------------------------------------------------------
+    // GET /tramites/mis-tramites — Trámites del cliente autenticado (portal cliente)
+    // IMPORTANTE: debe ir ANTES de /{id} para evitar colisión de rutas
+    // -----------------------------------------------------------------------
+
+    @GetMapping("/mis-tramites")
+    public ResponseEntity<Page<TramiteResponse>> getMisTramites(
+            @RequestParam(required = false) String estado,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        String clienteId = resolverUsuarioActualId();
+        return ResponseEntity.ok(tramiteService.getMisTramites(clienteId, estado, page, size));
+    }
+
+    // -----------------------------------------------------------------------
     // GET /tramites/sin-asignar — Bandeja de trámites sin asignar (solo ADMIN)
     // IMPORTANTE: debe ir ANTES de /{id} para evitar colisión de rutas
     // -----------------------------------------------------------------------

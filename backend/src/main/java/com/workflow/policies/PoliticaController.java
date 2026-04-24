@@ -29,6 +29,15 @@ public class PoliticaController {
         return ResponseEntity.ok(politicaService.getAll(estado, nombre, versionPadreId, page, size));
     }
 
+    // GET /policies/publicas — políticas iniciables por el cliente (estado ACTIVA)
+    // IMPORTANTE: debe ir ANTES de /{id} para evitar colisión de rutas
+    @GetMapping("/publicas")
+    public ResponseEntity<Page<PoliticaResponse>> getPublicas(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(politicaService.getPublicas(page, size));
+    }
+
     // GET /policies/{id}
     @GetMapping("/{id}")
     public ResponseEntity<PoliticaResponse> getById(@PathVariable String id) {

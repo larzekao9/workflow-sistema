@@ -181,6 +181,27 @@ public class TramiteService {
     }
 
     // -----------------------------------------------------------------------
+    // Mis trámites (portal cliente — filtrado estricto por clienteId del JWT)
+    // -----------------------------------------------------------------------
+
+    /**
+     * Retorna los trámites donde clienteId coincide exactamente con el userId autenticado.
+     * No depende del rol: el scope se impone por la clave de filtro, no por permisos.
+     * Soporta filtrado opcional por estado y paginación.
+     */
+    public Page<TramiteResponse> getMisTramites(String clienteId, String estado, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("creado_en").descending());
+        Tramite.EstadoTramite estadoEnum = parsearEstado(estado);
+
+        if (estadoEnum != null) {
+            return tramiteRepository.findByClienteIdAndEstado(clienteId, estadoEnum, pageable)
+                    .map(TramiteResponse::fromDocument);
+        }
+        return tramiteRepository.findByClienteId(clienteId, pageable)
+                .map(TramiteResponse::fromDocument);
+    }
+
+    // -----------------------------------------------------------------------
     // Stats de trámites (conteos por estado según scope del usuario)
     // -----------------------------------------------------------------------
 

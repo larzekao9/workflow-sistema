@@ -99,4 +99,21 @@ export class TramiteService {
   getApelacion(id: string): Observable<Apelacion> {
     return this.http.get<Apelacion>(`${this.base}/${id}/apelacion`);
   }
+
+  getMisTramites(
+    page = 0,
+    size = 10,
+    estado?: string
+  ): Observable<{ content: Tramite[]; totalElements: number }> {
+    let params = new HttpParams()
+      .set('page', page.toString())
+      .set('size', size.toString());
+    if (estado && estado.trim() !== '') {
+      params = params.set('estado', estado);
+    }
+    return this.http.get<{ content: Tramite[]; totalElements: number }>(
+      `${this.base}/mis-tramites`,
+      { params }
+    );
+  }
 }

@@ -66,6 +66,17 @@ public class PoliticaService {
         return toResponse(politica);
     }
 
+    /**
+     * Portal cliente: retorna las políticas en estado ACTIVA que el cliente puede iniciar.
+     * No requiere autorización especial: cualquier usuario autenticado puede listarlas.
+     */
+    public Page<PoliticaResponse> getPublicas(int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "creadoEn"));
+        return politicaRepository
+                .findByEstadoIn(List.of(Politica.EstadoPolitica.ACTIVA), pageable)
+                .map(this::toResponse);
+    }
+
     public Map<String, Object> getBpmn(String id) {
         Politica politica = findOrThrow(id);
         String xml = politica.getBpmnXml();
