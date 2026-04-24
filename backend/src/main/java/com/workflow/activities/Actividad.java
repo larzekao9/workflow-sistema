@@ -99,6 +99,10 @@ public class Actividad {
     @Field("tiempo_limite_horas")
     private Integer tiempoLimiteHoras;
 
+    @Field("acciones_permitidas")
+    @Builder.Default
+    private List<String> accionesPermitidas = new ArrayList<>();
+
     @Field("creado_en")
     private LocalDateTime creadoEn;
 

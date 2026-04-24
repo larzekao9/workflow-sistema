@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
@@ -112,6 +113,91 @@ public class TramiteController {
         String observaciones = request != null ? request.getObservaciones() : null;
         TramiteResponse response = tramiteService.responderTramite(id, clienteId, observaciones);
         return ResponseEntity.ok(response);
+    }
+
+    // -----------------------------------------------------------------------
+    // GET /tramites/sin-asignar — Bandeja de trámites sin asignar (solo ADMIN)
+    // IMPORTANTE: debe ir ANTES de /{id} para evitar colisión de rutas
+    // -----------------------------------------------------------------------
+
+    @GetMapping("/sin-asignar")
+    @PreAuthorize("hasAnyAuthority('ADMINISTRADOR','SUPERADMIN')")
+    public ResponseEntity<Page<TramiteResponse>> getTramitesSinAsignar(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok(tramiteService.getTramitesSinAsignar(page, size));
+    }
+
+    // -----------------------------------------------------------------------
+    // POST /tramites/{id}/asignar-manual — Asignación manual por administrador
+    // -----------------------------------------------------------------------
+
+    @PostMapping("/{id}/asignar-manual")
+    @PreAuthorize("hasAnyAuthority('ADMINISTRADOR','SUPERADMIN')")
+    public ResponseEntity<TramiteResponse> asignarManual(
+            @PathVariable String id,
+            @Valid @RequestBody AsignarManualRequest request) {
+        return ResponseEntity.ok(tramiteService.asignarManual(id, request.getFuncionarioId()));
+    }
+
+    // -----------------------------------------------------------------------
+    // POST /tramites/{id}/observar — Funcionario/admin observa formalmente
+    // -----------------------------------------------------------------------
+
+    @PostMapping("/{id}/observar")
+    @PreAuthorize("hasAnyAuthority('FUNCIONARIO','ADMINISTRADOR','SUPERADMIN')")
+    public ResponseEntity<TramiteResponse> observar(
+            @PathVariable String id,
+            @Valid @RequestBody ObservarDenegarRequest request) {
+        String funcionarioId = resolverUsuarioActualId();
+        return ResponseEntity.ok(tramiteService.observar(id, funcionarioId, request));
+    }
+
+    // -----------------------------------------------------------------------
+    // POST /tramites/{id}/denegar — Funcionario/admin deniega con opción de apelar
+    // -----------------------------------------------------------------------
+
+    @PostMapping("/{id}/denegar")
+    @PreAuthorize("hasAnyAuthority('FUNCIONARIO','ADMINISTRADOR','SUPERADMIN')")
+    public ResponseEntity<TramiteResponse> denegar(
+            @PathVariable String id,
+            @Valid @RequestBody ObservarDenegarRequest request) {
+        String funcionarioId = resolverUsuarioActualId();
+        return ResponseEntity.ok(tramiteService.denegar(id, funcionarioId, request));
+    }
+
+    // -----------------------------------------------------------------------
+    // POST /tramites/{id}/apelar — Cliente presenta apelación
+    // -----------------------------------------------------------------------
+
+    @PostMapping("/{id}/apelar")
+    public ResponseEntity<TramiteResponse> apelar(
+            @PathVariable String id,
+            @Valid @RequestBody ApelarRequest request) {
+        String clienteId = resolverUsuarioActualId();
+        return ResponseEntity.ok(tramiteService.apelar(id, clienteId, request));
+    }
+
+    // -----------------------------------------------------------------------
+    // POST /tramites/{id}/resolver-apelacion — Funcionario/admin resuelve
+    // -----------------------------------------------------------------------
+
+    @PostMapping("/{id}/resolver-apelacion")
+    @PreAuthorize("hasAnyAuthority('FUNCIONARIO','ADMINISTRADOR','SUPERADMIN')")
+    public ResponseEntity<TramiteResponse> resolverApelacion(
+            @PathVariable String id,
+            @RequestBody ResolverApelacionRequest request) {
+        String funcionarioId = resolverUsuarioActualId();
+        return ResponseEntity.ok(tramiteService.resolverApelacion(id, funcionarioId, request));
+    }
+
+    // -----------------------------------------------------------------------
+    // GET /tramites/{id}/apelacion — Detalle de la apelación
+    // -----------------------------------------------------------------------
+
+    @GetMapping("/{id}/apelacion")
+    public ResponseEntity<Tramite.Apelacion> getApelacion(@PathVariable String id) {
+        return ResponseEntity.ok(tramiteService.getApelacion(id));
     }
 
     // -----------------------------------------------------------------------

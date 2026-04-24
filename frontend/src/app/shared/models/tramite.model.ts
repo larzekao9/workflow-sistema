@@ -1,4 +1,4 @@
-export type EstadoTramite = 'INICIADO' | 'EN_PROCESO' | 'COMPLETADO' | 'RECHAZADO' | 'CANCELADO' | 'DEVUELTO' | 'ESCALADO';
+export type EstadoTramite = 'INICIADO' | 'EN_PROCESO' | 'COMPLETADO' | 'RECHAZADO' | 'CANCELADO' | 'DEVUELTO' | 'ESCALADO' | 'SIN_ASIGNAR' | 'EN_APELACION';
 export type AccionTramite = 'APROBAR' | 'RECHAZAR' | 'DEVOLVER' | 'ESCALAR';
 
 export interface EtapaActual {
@@ -9,14 +9,36 @@ export interface EtapaActual {
   area?: string;
 }
 
+export interface FileRef {
+  fileId: string;
+  nombre: string;
+  tipo: string;
+  url: string;
+  tamanio?: number;
+  subidoEn?: string;
+}
+
+export interface Apelacion {
+  activa: boolean;
+  fechaInicio: string;
+  fechaLimite: string;
+  motivoOriginal: string;
+  documentosOriginales?: FileRef[];
+  documentosApelatoria?: FileRef[];
+  justificacionCliente?: string;
+  estado: 'PENDIENTE' | 'EN_REVISION' | 'APROBADO' | 'DENEGADO';
+}
+
 export interface HistorialEntry {
   actividadBpmnId?: string;
   actividadNombre?: string;
   responsableId?: string;
   responsableNombre?: string;
+  responsableCargo?: string;
   accion: string;
   timestamp: string;
   observaciones?: string;
+  documentosAdjuntos?: FileRef[];
 }
 
 export interface Tramite {
@@ -34,6 +56,7 @@ export interface Tramite {
   creadoEn: string;
   actualizadoEn: string;
   fechaVencimientoEtapa?: string;
+  apelacion?: Apelacion;
 }
 
 export interface CreateTramiteRequest {
@@ -57,13 +80,15 @@ export interface EstadoConfig {
 }
 
 export const ESTADO_CONFIG: Record<EstadoTramite, EstadoConfig> = {
-  INICIADO:   { label: 'Iniciado',   cssClass: 'chip-iniciado' },
-  EN_PROCESO: { label: 'En proceso', cssClass: 'chip-en-proceso' },
-  COMPLETADO: { label: 'Completado', cssClass: 'chip-completado' },
-  RECHAZADO:  { label: 'Rechazado',  cssClass: 'chip-rechazado' },
-  DEVUELTO:   { label: 'Devuelto',   cssClass: 'chip-devuelto' },
-  CANCELADO:  { label: 'Cancelado',  cssClass: 'chip-cancelado' },
-  ESCALADO:   { label: 'Escalado',   cssClass: 'chip-escalado' }
+  INICIADO:      { label: 'Iniciado',       cssClass: 'chip-iniciado' },
+  EN_PROCESO:    { label: 'En proceso',     cssClass: 'chip-en-proceso' },
+  COMPLETADO:    { label: 'Completado',     cssClass: 'chip-completado' },
+  RECHAZADO:     { label: 'Rechazado',      cssClass: 'chip-rechazado' },
+  DEVUELTO:      { label: 'Devuelto',       cssClass: 'chip-devuelto' },
+  CANCELADO:     { label: 'Cancelado',      cssClass: 'chip-cancelado' },
+  ESCALADO:      { label: 'Escalado',       cssClass: 'chip-escalado' },
+  SIN_ASIGNAR:   { label: 'Sin asignar',    cssClass: 'chip-sin-asignar' },
+  EN_APELACION:  { label: 'En apelación',   cssClass: 'chip-en-apelacion' }
 };
 
 export function estadoConfig(estado: EstadoTramite): EstadoConfig {
@@ -78,4 +103,5 @@ export interface TramiteStats {
   rechazados: number;
   devueltos: number;
   escalados: number;
+  sinAsignar?: number;
 }

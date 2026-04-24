@@ -87,6 +87,54 @@ type Rol = 'ADMINISTRADOR' | 'FUNCIONARIO' | 'CLIENTE';
         <span>Atención: tenés trámites pendientes de corrección.</span>
       </div>
 
+      <!-- Alerta sin asignar (ADMIN) -->
+      <div
+        *ngIf="rol === 'ADMINISTRADOR' && sinAsignarCount > 0 && filtroActivo !== 'SIN_ASIGNAR'"
+        class="alert-banner alert-sin-asignar"
+        role="alert"
+        aria-live="polite">
+        <mat-icon aria-hidden="true">person_off</mat-icon>
+        <span>
+          Hay <strong>{{ sinAsignarCount }}</strong> trámite{{ sinAsignarCount !== 1 ? 's' : '' }} sin funcionario asignado.
+        </span>
+        <button
+          mat-stroked-button
+          class="btn-ver-sin-asignar"
+          (click)="activarFiltroSinAsignar()"
+          aria-label="Ver trámites sin asignar">
+          Ver ahora
+        </button>
+      </div>
+
+      <!-- ─────────────── TABS ADMIN (filtros rápidos) ─────────────── -->
+      <div *ngIf="rol === 'ADMINISTRADOR'" class="admin-tabs" role="tablist" aria-label="Filtros rápidos">
+        <button
+          class="admin-tab"
+          [class.admin-tab--active]="filtroActivo === 'TODOS'"
+          (click)="activarFiltro('TODOS')"
+          role="tab"
+          [attr.aria-selected]="filtroActivo === 'TODOS'">
+          <mat-icon aria-hidden="true">list_alt</mat-icon>
+          Todos
+        </button>
+        <button
+          class="admin-tab admin-tab--warning"
+          [class.admin-tab--active]="filtroActivo === 'SIN_ASIGNAR'"
+          (click)="activarFiltroSinAsignar()"
+          role="tab"
+          [attr.aria-selected]="filtroActivo === 'SIN_ASIGNAR'"
+          [attr.aria-label]="'Sin asignar, ' + sinAsignarCount + ' trámites'">
+          <mat-icon aria-hidden="true">person_off</mat-icon>
+          Sin asignar
+          <span
+            *ngIf="sinAsignarCount > 0"
+            class="tab-badge tab-badge--warn"
+            aria-hidden="true">
+            {{ sinAsignarCount }}
+          </span>
+        </button>
+      </div>
+
       <!-- ─────────────── FILTROS ─────────────── -->
       <mat-card class="filtros-card">
         <mat-card-content>
@@ -104,6 +152,8 @@ type Rol = 'ADMINISTRADOR' | 'FUNCIONARIO' | 'CLIENTE';
                 <mat-option value="DEVUELTO">Devuelto</mat-option>
                 <mat-option value="CANCELADO">Cancelado</mat-option>
                 <mat-option value="ESCALADO">Escalado</mat-option>
+                <mat-option value="SIN_ASIGNAR">Sin asignar</mat-option>
+                <mat-option value="EN_APELACION">En apelación</mat-option>
               </mat-select>
             </mat-form-field>
 
@@ -380,6 +430,97 @@ type Rol = 'ADMINISTRADOR' | 'FUNCIONARIO' | 'CLIENTE';
 
     .alert-warn mat-icon { color: #f57f17; }
 
+    .alert-sin-asignar {
+      background: #fff8e1;
+      border: 1px solid #ffcc02;
+      color: #5d4037;
+    }
+
+    .alert-sin-asignar mat-icon { color: #f9a825; }
+
+    .btn-ver-sin-asignar {
+      margin-left: auto;
+      flex-shrink: 0;
+      font-size: 0.82rem;
+      height: 32px;
+      line-height: 32px;
+      border-color: #e65100;
+      color: #e65100;
+    }
+
+    /* Tabs ADMIN */
+    .admin-tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .admin-tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 16px;
+      height: 36px;
+      border-radius: 18px;
+      border: 1px solid #e0e0e0;
+      background: #fafafa;
+      color: #5f6368;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 150ms ease-out, border-color 150ms ease-out, color 150ms ease-out;
+    }
+
+    .admin-tab mat-icon {
+      font-size: 16px;
+      width: 16px;
+      height: 16px;
+    }
+
+    .admin-tab:hover {
+      background: #f5f5f5;
+      border-color: #bdbdbd;
+    }
+
+    .admin-tab:focus {
+      outline: 2px solid #1565c0;
+      outline-offset: 2px;
+    }
+
+    .admin-tab--active {
+      background: #e3f2fd;
+      border-color: #1565c0;
+      color: #0d47a1;
+    }
+
+    .admin-tab--warning.admin-tab--active {
+      background: #fff8e1;
+      border-color: #f9a825;
+      color: #e65100;
+    }
+
+    .admin-tab--warning:not(.admin-tab--active):hover {
+      background: #fffde7;
+      border-color: #f9a825;
+    }
+
+    .tab-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 20px;
+      height: 20px;
+      padding: 0 5px;
+      border-radius: 10px;
+      font-size: 0.7rem;
+      font-weight: 700;
+    }
+
+    .tab-badge--warn {
+      background: #e65100;
+      color: #ffffff;
+    }
+
     /* Filtros */
     .filtros-card {
       border-radius: 8px;
@@ -474,7 +615,8 @@ type Rol = 'ADMINISTRADOR' | 'FUNCIONARIO' | 'CLIENTE';
     .chip-rechazado  { background: #ffebee; color: #b71c1c; }
     .chip-devuelto   { background: #fff3e0; color: #e65100; }
     .chip-cancelado  { background: #eeeeee; color: #616161; }
-    .chip-escalado   { background: #f3e5f5; color: #6a1b9a; }
+    .chip-escalado     { background: #f3e5f5; color: #6a1b9a; }
+    .chip-sin-asignar  { background: #fff8e1; color: #e65100; border: 1px solid #ffcc02; }
 
     /* Cell helpers */
     .cell-primary { display: block; font-weight: 500; }
@@ -538,6 +680,11 @@ export class TramitesComponent implements OnInit {
   user: User | null = null;
   currentUserId = '';
 
+  /** Filtro rápido activo para ADMINISTRADOR */
+  filtroActivo: 'TODOS' | 'SIN_ASIGNAR' = 'TODOS';
+  /** Conteo de trámites sin asignar (solo ADMIN) */
+  sinAsignarCount = 0;
+
   filtrosForm: FormGroup;
 
   private readonly destroyRef = inject(DestroyRef);
@@ -577,6 +724,9 @@ export class TramitesComponent implements OnInit {
   }
 
   get emptyMessage(): string {
+    if (this.filtroActivo === 'SIN_ASIGNAR') {
+      return 'No hay trámites sin asignar. Todos los trámites activos tienen un funcionario asignado.';
+    }
     const estado = this.filtrosForm.get('estado')?.value as string;
     if (estado) return `No hay trámites en estado "${estado}" con los filtros actuales.`;
     const msgs: Record<Rol, string> = {
@@ -617,6 +767,9 @@ export class TramitesComponent implements OnInit {
     this.currentUserId = this.user?.id ?? '';
     this.resolveRol();
     this.load();
+    if (this.rol === 'ADMINISTRADOR') {
+      this.cargarConteoSinAsignar();
+    }
 
     // Recargar al cambiar filtros (debounce para búsqueda de texto)
     this.filtrosForm.get('estado')!.valueChanges
@@ -651,26 +804,49 @@ export class TramitesComponent implements OnInit {
 
   private load(): void {
     this.isLoading = true;
-    const estado = this.filtrosForm.get('estado')?.value as string | undefined;
 
-    this.tramiteService.getAll(this.pageIndex, this.pageSize, estado || undefined)
+    const source$ = this.filtroActivo === 'SIN_ASIGNAR'
+      ? this.tramiteService.getTramitesSinAsignar(this.pageIndex, this.pageSize)
+      : (() => {
+          const estado = this.filtrosForm.get('estado')?.value as string | undefined;
+          return this.tramiteService.getAll(this.pageIndex, this.pageSize, estado || undefined);
+        })();
+
+    source$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (res) => {
+        this.tramites = res.content;
+        this.totalElements = res.totalElements;
+        this.isLoading = false;
+      },
+      error: (err: { error?: { message?: string } }) => {
+        this.isLoading = false;
+        console.error('[Tramites] Error al cargar:', err);
+        this.snackBar.open(
+          err?.error?.message || 'Error al cargar los trámites',
+          'Cerrar',
+          { duration: 4000 }
+        );
+      }
+    });
+  }
+
+  private cargarConteoSinAsignar(): void {
+    this.tramiteService.getTramitesSinAsignar(0, 1)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (res) => {
-          this.tramites = res.content;
-          this.totalElements = res.totalElements;
-          this.isLoading = false;
-        },
-        error: (err: { error?: { message?: string } }) => {
-          this.isLoading = false;
-          console.error('[Tramites] Error al cargar:', err);
-          this.snackBar.open(
-            err?.error?.message || 'Error al cargar los trámites',
-            'Cerrar',
-            { duration: 4000 }
-          );
-        }
+        next: (res) => { this.sinAsignarCount = res.totalElements; },
+        error: (err: unknown) => console.error('[Tramites] Error conteo sin asignar:', err)
       });
+  }
+
+  activarFiltro(filtro: 'TODOS' | 'SIN_ASIGNAR'): void {
+    this.filtroActivo = filtro;
+    this.pageIndex = 0;
+    this.load();
+  }
+
+  activarFiltroSinAsignar(): void {
+    this.activarFiltro('SIN_ASIGNAR');
   }
 
   onPage(event: PageEvent): void {

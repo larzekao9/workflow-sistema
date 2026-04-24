@@ -101,6 +101,11 @@ export const routes: Routes = [
     loadComponent: () => import('./tramites/tramite-correccion/tramite-correccion.component').then(m => m.TramiteCorreccionComponent)
   },
   {
+    path: 'tramites/:id/apelacion',
+    canActivate: [authGuard],
+    loadComponent: () => import('./tramites/tramite-apelacion/tramite-apelacion.component').then(m => m.TramiteApelacionComponent)
+  },
+  {
     path: 'tramites/:id',
     canActivate: [authGuard],
     loadComponent: () => import('./tramites/tramite-detalle/tramite-detalle.component').then(m => m.TramiteDetalleComponent)

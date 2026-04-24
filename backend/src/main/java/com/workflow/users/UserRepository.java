@@ -20,4 +20,10 @@ public interface UserRepository extends MongoRepository<User, String> {
     List<User> findByEmpresaIdAndActivoTrue(String empresaId);
 
     List<User> findByDepartmentIdAndActivoTrue(String departmentId);
+
+    /**
+     * Funcionarios candidatos para asignación automática: empresa + departamento + cargo + activo.
+     */
+    List<User> findByEmpresaIdAndDepartmentIdAndCargoAndActivoTrue(
+            String empresaId, String departmentId, String cargo);
 }

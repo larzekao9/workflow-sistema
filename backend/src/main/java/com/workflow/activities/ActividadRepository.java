@@ -18,4 +18,10 @@ public interface ActividadRepository extends MongoRepository<Actividad, String> 
     long countByFormularioId(String formularioId);
 
     void deleteByPoliticaId(String politicaId);
+
+    /**
+     * Busca la actividad de una política cuyo nombre coincide con el de un BPMN task.
+     * Usado por el motor de asignación automática para obtener departmentId y cargoRequerido.
+     */
+    java.util.Optional<Actividad> findByPoliticaIdAndNombre(String politicaId, String nombre);
 }

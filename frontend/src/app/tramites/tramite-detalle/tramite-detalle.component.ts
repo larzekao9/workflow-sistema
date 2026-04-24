@@ -21,6 +21,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatCardModule } from '@angular/material/card';
@@ -30,6 +31,8 @@ import { Form } from '@bpmn-io/form-js-viewer';
 
 import { TramiteService } from '../../shared/services/tramite.service';
 import { AuthService } from '../../shared/services/auth.service';
+import { UserService } from '../../shared/services/user.service';
+import { User } from '../../shared/models/user.model';
 import {
   Tramite,
   EstadoTramite,
@@ -130,6 +133,89 @@ export class AccionDialogComponent {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Dialog de asignación manual de funcionario
+// ─────────────────────────────────────────────────────────────────────────────
+interface AsignarDialogData {
+  tramiteId: string;
+  funcionarios: User[];
+}
+
+interface AsignarDialogResult {
+  confirmed: boolean;
+  funcionarioId?: string;
+}
+
+@NgComponent({
+  selector: 'app-asignar-funcionario-dialog',
+  standalone: true,
+  imports: [
+    CommonModule,
+    ReactiveFormsModule,
+    MatButtonModule,
+    MatFormFieldModule,
+    MatSelectModule,
+    MatProgressSpinnerModule,
+    MatDialogModule
+  ],
+  template: `
+    <h2 mat-dialog-title>Asignar funcionario</h2>
+    <mat-dialog-content>
+      <p style="margin:0 0 20px;color:#5f6368;font-size:0.9rem">
+        Seleccioná el funcionario que se hará cargo de este trámite.
+      </p>
+      <mat-form-field appearance="outline" style="width:100%">
+        <mat-label>Funcionario</mat-label>
+        <mat-select [formControl]="funcionarioControl" aria-label="Seleccionar funcionario">
+          <mat-option
+            *ngFor="let f of data.funcionarios"
+            [value]="f.id">
+            {{ f.nombreCompleto }}
+            <span
+              *ngIf="f.departmentNombre"
+              style="font-size:0.78rem;color:#9e9e9e">
+              &nbsp;— {{ f.departmentNombre }}
+            </span>
+          </mat-option>
+        </mat-select>
+        <mat-error *ngIf="funcionarioControl.hasError('required')">
+          Debés seleccionar un funcionario.
+        </mat-error>
+      </mat-form-field>
+    </mat-dialog-content>
+    <mat-dialog-actions align="end" style="gap:8px;padding:16px">
+      <button mat-stroked-button (click)="cancel()" aria-label="Cancelar asignación">
+        Cancelar
+      </button>
+      <button
+        mat-raised-button
+        color="primary"
+        (click)="confirm()"
+        [disabled]="funcionarioControl.invalid"
+        aria-label="Confirmar asignación de funcionario">
+        Asignar
+      </button>
+    </mat-dialog-actions>
+  `
+})
+export class AsignarFuncionarioDialogComponent {
+  funcionarioControl = new FormControl<string>('', { validators: [Validators.required], nonNullable: true });
+
+  constructor(
+    private readonly ref: MatDialogRef<AsignarFuncionarioDialogComponent, AsignarDialogResult>,
+    @Inject(MAT_DIALOG_DATA) public data: AsignarDialogData
+  ) {}
+
+  confirm(): void {
+    if (this.funcionarioControl.invalid) return;
+    this.ref.close({ confirmed: true, funcionarioId: this.funcionarioControl.value });
+  }
+
+  cancel(): void {
+    this.ref.close({ confirmed: false });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Componente principal
 // ─────────────────────────────────────────────────────────────────────────────
 @Component({
@@ -148,6 +234,7 @@ export class AccionDialogComponent {
     MatDialogModule,
     MatFormFieldModule,
     MatInputModule,
+    MatSelectModule,
     MatDividerModule,
     MatTooltipModule,
     MatCardModule,
@@ -254,6 +341,35 @@ export class AccionDialogComponent {
             </div>
           </div>
 
+          <!-- Banner EN_APELACION -->
+          <div
+            *ngIf="tramite.estado === 'EN_APELACION'"
+            class="status-banner banner-apelacion"
+            role="alert">
+            <div class="banner-icon">
+              <mat-icon aria-hidden="true">gavel</mat-icon>
+            </div>
+            <div class="banner-body">
+              <strong *ngIf="tramite.apelacion?.estado === 'PENDIENTE'">Tu trámite fue observado — tenés plazo para apelar</strong>
+              <strong *ngIf="tramite.apelacion?.estado === 'EN_REVISION'">Tu apelación está siendo revisada</strong>
+              <p *ngIf="tramite.apelacion?.motivoOriginal">
+                <em>Motivo:</em> {{ tramite.apelacion!.motivoOriginal }}
+              </p>
+              <p *ngIf="tramite.apelacion?.fechaLimite && tramite.apelacion?.estado === 'PENDIENTE'">
+                Plazo: {{ tramite.apelacion!.fechaLimite | date:'dd/MM/yyyy HH:mm' }}
+              </p>
+              <button
+                mat-raised-button
+                color="primary"
+                *ngIf="tramite.apelacion?.estado === 'PENDIENTE'"
+                [routerLink]="['/tramites', tramite.id, 'apelacion']"
+                aria-label="Ir a enviar apelación">
+                <mat-icon>send</mat-icon>
+                Enviar apelación
+              </button>
+            </div>
+          </div>
+
           <!-- Banner COMPLETADO -->
           <div
             *ngIf="tramite.estado === 'COMPLETADO'"
@@ -300,6 +416,17 @@ export class AccionDialogComponent {
                   <span class="info-label">Área responsable</span>
                   <span class="info-value">{{ tramite.etapaActual!.area }}</span>
                 </div>
+                <div class="info-item" *ngIf="tramite.asignadoAId">
+                  <span class="info-label">Funcionario asignado</span>
+                  <span class="info-value asignado-value">
+                    <mat-icon aria-hidden="true" class="asignado-icon">person</mat-icon>
+                    {{ tramite.asignadoANombre || tramite.asignadoAId }}
+                  </span>
+                </div>
+                <div class="info-item" *ngIf="tramite.etapaActual?.area">
+                  <span class="info-label">Área responsable</span>
+                  <span class="info-value">{{ tramite.etapaActual!.area }}</span>
+                </div>
                 <div class="info-item">
                   <span class="info-label">Creado</span>
                   <span class="info-value">{{ tramite.creadoEn | date:'dd/MM/yyyy HH:mm' }}</span>
@@ -308,6 +435,83 @@ export class AccionDialogComponent {
                   <span class="info-label">Vence etapa</span>
                   <span class="info-value vence">{{ tramite.fechaVencimientoEtapa | date:'dd/MM/yyyy HH:mm' }}</span>
                 </div>
+              </div>
+            </mat-card-content>
+          </mat-card>
+
+          <!-- Alerta: sin funcionario asignado -->
+          <div
+            *ngIf="tramite.estado === 'SIN_ASIGNAR'"
+            class="status-banner banner-sin-asignar"
+            role="alert"
+            aria-live="assertive">
+            <div class="banner-icon">
+              <mat-icon aria-hidden="true">person_off</mat-icon>
+            </div>
+            <div class="banner-body">
+              <strong>Sin funcionario asignado</strong>
+              <p>Este trámite no tiene un funcionario responsable. Asigná uno manualmente para que pueda ser atendido.</p>
+              <button
+                *ngIf="esAdmin()"
+                mat-raised-button
+                color="primary"
+                class="btn-asignar"
+                (click)="abrirDialogAsignar()"
+                [disabled]="isAsignando"
+                aria-label="Asignar funcionario manualmente a este trámite">
+                <mat-spinner *ngIf="isAsignando" diameter="18" style="display:inline-block;margin-right:6px"></mat-spinner>
+                <mat-icon *ngIf="!isAsignando" aria-hidden="true">assignment_ind</mat-icon>
+                Asignar manualmente
+              </button>
+            </div>
+          </div>
+
+          <!-- Panel revisión apelación -->
+          <mat-card *ngIf="tramite.apelacion?.estado === 'EN_REVISION'" class="apelacion-revision-card">
+            <mat-card-header>
+              <mat-icon mat-card-avatar aria-hidden="true">gavel</mat-icon>
+              <mat-card-title>Apelación pendiente de resolución</mat-card-title>
+              <mat-card-subtitle>El solicitante ha enviado su apelación. Revisá y resolvé.</mat-card-subtitle>
+            </mat-card-header>
+            <mat-card-content>
+              <p *ngIf="tramite.apelacion?.motivoOriginal">
+                <strong>Motivo original:</strong> {{ tramite.apelacion!.motivoOriginal }}
+              </p>
+              <p *ngIf="tramite.apelacion?.justificacionCliente">
+                <strong>Justificación del cliente:</strong> {{ tramite.apelacion!.justificacionCliente }}
+              </p>
+              <div *ngIf="tramite.apelacion?.documentosApelatoria?.length" class="docs-list">
+                <strong>Documentación adjunta:</strong>
+                <ul>
+                  <li *ngFor="let d of tramite.apelacion!.documentosApelatoria">
+                    <mat-icon aria-hidden="true" style="font-size:14px;vertical-align:middle">attach_file</mat-icon>
+                    {{ d.nombre }}
+                  </li>
+                </ul>
+              </div>
+              <mat-form-field appearance="outline" style="width:100%;margin-top:12px">
+                <mat-label>Observaciones (opcional)</mat-label>
+                <textarea matInput [formControl]="apelacionObsControl" rows="3"
+                  placeholder="Dejá un comentario para el solicitante..."
+                  aria-label="Observaciones sobre la resolución de la apelación">
+                </textarea>
+              </mat-form-field>
+              <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;align-items:center">
+                <button mat-raised-button color="primary"
+                  (click)="resolverApelacionFn(true)"
+                  [disabled]="isActuando"
+                  aria-label="Aprobar apelación y reactivar trámite">
+                  <mat-icon>thumb_up</mat-icon>
+                  Aprobar apelación
+                </button>
+                <button mat-raised-button color="warn"
+                  (click)="resolverApelacionFn(false)"
+                  [disabled]="isActuando"
+                  aria-label="Denegar apelación">
+                  <mat-icon>thumb_down</mat-icon>
+                  Denegar apelación
+                </button>
+                <mat-spinner *ngIf="isActuando" diameter="24" aria-label="Procesando"></mat-spinner>
               </div>
             </mat-card-content>
           </mat-card>
@@ -373,6 +577,26 @@ export class AccionDialogComponent {
                   aria-label="Escalar trámite">
                   <mat-icon>escalator_warning</mat-icon>
                   Escalar
+                </button>
+                <button
+                  mat-stroked-button
+                  color="warn"
+                  (click)="ejecutarObservarDenegar('observar')"
+                  [disabled]="isActuando || !obsInlineControl.value?.trim()"
+                  aria-label="Observar trámite y abrir período de apelación"
+                  matTooltip="Requerido: observaciones como motivo">
+                  <mat-icon>visibility_off</mat-icon>
+                  Observar
+                </button>
+                <button
+                  mat-raised-button
+                  color="warn"
+                  (click)="ejecutarObservarDenegar('denegar')"
+                  [disabled]="isActuando || !obsInlineControl.value?.trim()"
+                  aria-label="Denegar trámite con período de apelación"
+                  matTooltip="Requerido: observaciones como motivo">
+                  <mat-icon>block</mat-icon>
+                  Denegar (con apelación)
                 </button>
                 <mat-spinner
                   *ngIf="isActuando"
@@ -545,7 +769,21 @@ export class AccionDialogComponent {
     .chip-rechazado  { background: #ffebee; color: #b71c1c; }
     .chip-devuelto   { background: #fff3e0; color: #e65100; }
     .chip-cancelado  { background: #eeeeee; color: #616161; }
-    .chip-escalado   { background: #f3e5f5; color: #6a1b9a; }
+    .chip-escalado     { background: #f3e5f5; color: #6a1b9a; }
+    .chip-sin-asignar  { background: #fff8e1; color: #e65100; border: 1px solid #ffcc02; }
+    .chip-en-apelacion { background: #e8eaf6; color: #283593; border: 1px solid #9fa8da; }
+
+    .banner-apelacion {
+      background: #e8eaf6; border: 1px solid #9fa8da; border-radius: 8px;
+      padding: 14px 18px; display: flex; align-items: flex-start; gap: 14px; color: #283593;
+    }
+    .banner-apelacion .banner-icon { font-size: 24px; line-height: 1; }
+
+    .apelacion-revision-card {
+      border-left: 4px solid #1565c0;
+    }
+    .apelacion-revision-card p { margin: 4px 0; font-size: 0.9rem; }
+    .docs-list ul { margin: 4px 0 0; padding-left: 18px; font-size: 0.875rem; }
 
     /* Info card */
     .info-card mat-card-title {
@@ -639,6 +877,44 @@ export class AccionDialogComponent {
       font-size: 0.9rem;
     }
 
+    .banner-sin-asignar {
+      background: #fff8e1;
+      border: 1px solid #ffcc02;
+      color: #5d4037;
+    }
+
+    .banner-sin-asignar .banner-icon mat-icon {
+      color: #f9a825;
+      font-size: 28px;
+      width: 28px;
+      height: 28px;
+    }
+
+    .banner-sin-asignar .banner-body p {
+      margin: 6px 0 0;
+      font-size: 0.9rem;
+      color: #5d4037;
+    }
+
+    .btn-asignar {
+      margin-top: 12px;
+    }
+
+    /* Asignado en info-grid */
+    .asignado-value {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      color: #1b5e20;
+      font-weight: 500;
+    }
+
+    .asignado-icon {
+      font-size: 16px;
+      width: 16px;
+      height: 16px;
+    }
+
     .banner-icon {
       flex-shrink: 0;
     }
@@ -699,9 +975,10 @@ export class AccionDialogComponent {
       height: 22px;
     }
 
-    .estado-final-block--completado { background: #e8f5e9; border-color: #a5d6a7; color: #1b5e20; }
-    .estado-final-block--rechazado  { background: #ffebee; border-color: #ef9a9a; color: #b71c1c; }
-    .estado-final-block--cancelado  { background: #fafafa; border-color: #e0e0e0; color: #616161; }
+    .estado-final-block--completado   { background: #e8f5e9; border-color: #a5d6a7; color: #1b5e20; }
+    .estado-final-block--rechazado    { background: #ffebee; border-color: #ef9a9a; color: #b71c1c; }
+    .estado-final-block--cancelado    { background: #fafafa; border-color: #e0e0e0; color: #616161; }
+    .estado-final-block--sin_asignar  { background: #fff8e1; border-color: #ffcc02; color: #e65100; }
 
     /* Formulario */
     .formulario-card mat-card-title {
@@ -861,10 +1138,12 @@ export class TramiteDetalleComponent implements OnInit, OnDestroy {
   tramite: Tramite | null = null;
   isLoading = true;
   isActuando = false;
+  isAsignando = false;
   hasFormulario = false;
   isLoadingFormulario = false;
 
   obsInlineControl = new FormControl('');
+  apelacionObsControl = new FormControl('');
 
   private viewer: Form | null = null;
   private readonly destroy$ = new Subject<void>();
@@ -874,6 +1153,8 @@ export class TramiteDetalleComponent implements OnInit, OnDestroy {
     private readonly router: Router,
     private readonly tramiteService: TramiteService,
     private readonly authService: AuthService,
+    private readonly userService: UserService,
+    private readonly dialog: MatDialog,
     private readonly snackBar: MatSnackBar,
     private readonly cdr: ChangeDetectorRef
   ) {}
@@ -902,11 +1183,129 @@ export class TramiteDetalleComponent implements OnInit, OnDestroy {
     return !rol.includes('ADMIN') && !rol.includes('FUNCION');
   }
 
+  esAdmin(): boolean {
+    const rol = (this.authService.getCurrentUser()?.rolNombre ?? '').toUpperCase();
+    return rol.includes('ADMIN');
+  }
+
   puedeAccionar(): boolean {
     if (!this.tramite) return false;
     const estado = this.tramite.estado;
-    if (estado !== 'INICIADO' && estado !== 'EN_PROCESO') return false;
+    if (estado !== 'INICIADO' && estado !== 'EN_PROCESO' && estado !== 'ESCALADO') return false;
     return !this.esCliente();
+  }
+
+  abrirDialogAsignar(): void {
+    if (!this.tramite) return;
+    const tramiteId = this.tramite.id;
+
+    this.userService.getAll().pipe(takeUntil(this.destroy$)).subscribe({
+      next: (users: User[]) => {
+        const funcionarios = users.filter(
+          u => (u.rolNombre ?? '').toUpperCase().includes('FUNCION')
+        );
+
+        if (funcionarios.length === 0) {
+          this.snackBar.open('No hay funcionarios disponibles en el sistema.', 'Cerrar', { duration: 3500 });
+          return;
+        }
+
+        const ref = this.dialog.open<AsignarFuncionarioDialogComponent, AsignarDialogData, AsignarDialogResult>(
+          AsignarFuncionarioDialogComponent,
+          {
+            width: '400px',
+            data: { tramiteId, funcionarios }
+          }
+        );
+
+        ref.afterClosed().pipe(takeUntil(this.destroy$)).subscribe((result) => {
+          if (!result?.confirmed || !result.funcionarioId) return;
+          this.isAsignando = true;
+          this.tramiteService.asignarManual(tramiteId, result.funcionarioId)
+            .pipe(takeUntil(this.destroy$))
+            .subscribe({
+              next: (updated) => {
+                this.tramite = updated;
+                this.isAsignando = false;
+                this.snackBar.open('Funcionario asignado correctamente.', 'Cerrar', { duration: 3000 });
+                this.cdr.detectChanges();
+              },
+              error: (err: { error?: { message?: string } }) => {
+                this.isAsignando = false;
+                console.error('[TramiteDetalle] Error asignando funcionario:', err);
+                this.snackBar.open(
+                  err?.error?.message || 'Error al asignar el funcionario',
+                  'Cerrar',
+                  { duration: 4000 }
+                );
+              }
+            });
+        });
+      },
+      error: (err: unknown) => {
+        console.error('[TramiteDetalle] Error cargando funcionarios:', err);
+        this.snackBar.open('Error al cargar la lista de funcionarios.', 'Cerrar', { duration: 4000 });
+      }
+    });
+  }
+
+  ejecutarObservarDenegar(tipo: 'observar' | 'denegar'): void {
+    if (!this.tramite) return;
+    const motivo = this.obsInlineControl.value?.trim() ?? '';
+    if (!motivo) {
+      this.snackBar.open('El motivo es obligatorio para esta acción.', 'Cerrar', { duration: 3000 });
+      return;
+    }
+    this.isActuando = true;
+    const call$ = tipo === 'observar'
+      ? this.tramiteService.observar(this.tramite.id, motivo)
+      : this.tramiteService.denegar(this.tramite.id, motivo);
+
+    call$.pipe(takeUntil(this.destroy$)).subscribe({
+      next: (updated) => {
+        this.tramite = updated;
+        this.isActuando = false;
+        this.obsInlineControl.reset();
+        this.snackBar.open(
+          tipo === 'observar'
+            ? 'Trámite observado. El cliente puede apelar en 48 hs.'
+            : 'Trámite denegado. El cliente puede apelar en 48 hs.',
+          'Cerrar',
+          { duration: 3500 }
+        );
+        this.cdr.detectChanges();
+      },
+      error: (err: { error?: { message?: string } }) => {
+        this.isActuando = false;
+        this.snackBar.open(err?.error?.message || 'Error al procesar la acción', 'Cerrar', { duration: 4000 });
+      }
+    });
+  }
+
+  resolverApelacionFn(aprobada: boolean): void {
+    if (!this.tramite) return;
+    this.isActuando = true;
+    const obs = this.apelacionObsControl.value?.trim() || undefined;
+
+    this.tramiteService.resolverApelacion(this.tramite.id, aprobada, obs)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (updated) => {
+          this.tramite = updated;
+          this.isActuando = false;
+          this.apelacionObsControl.reset();
+          this.snackBar.open(
+            aprobada ? 'Apelación aprobada. Trámite reactivado.' : 'Apelación denegada.',
+            'Cerrar',
+            { duration: 3000 }
+          );
+          this.cdr.detectChanges();
+        },
+        error: (err: { error?: { message?: string } }) => {
+          this.isActuando = false;
+          this.snackBar.open(err?.error?.message || 'Error al resolver la apelación', 'Cerrar', { duration: 4000 });
+        }
+      });
   }
 
   get historialOrdenado(): HistorialEntry[] {
@@ -928,28 +1327,48 @@ export class TramiteDetalleComponent implements OnInit, OnDestroy {
 
   iconoAccion(accion: string): string {
     const map: Record<string, string> = {
-      APROBAR:    'check_circle',
-      RECHAZAR:   'cancel',
-      DEVOLVER:   'reply',
-      ESCALAR:    'escalator_warning',
-      INICIAR:    'play_arrow',
-      INICIADO:   'play_arrow',
-      RESPONDER:  'chat',
-      RESPONDIDO: 'chat'
+      APROBAR:                  'check_circle',
+      RECHAZAR:                 'cancel',
+      DEVOLVER:                 'reply',
+      ESCALAR:                  'escalator_warning',
+      INICIAR:                  'play_arrow',
+      INICIADO:                 'play_arrow',
+      RESPONDER:                'chat',
+      RESPONDIDO:               'chat',
+      TOMADO:                   'person',
+      ASIGNADO_AUTO:            'auto_awesome',
+      ASIGNADO_MANUAL:          'assignment_ind',
+      RESPONDIDO_POR_CLIENTE:   'send',
+      OBSERVADO:                'visibility_off',
+      DENEGADO_APELAR:          'block',
+      APELADO:                  'gavel',
+      APELACION_APROBADA:       'thumb_up',
+      APELACION_DENEGADA:       'thumb_down',
+      APELACION_VENCIDA:        'timer_off'
     };
     return map[accion.toUpperCase()] ?? 'circle';
   }
 
   formatAccion(accion: string): string {
     const map: Record<string, string> = {
-      APROBAR:    'Aprobado',
-      RECHAZAR:   'Rechazado',
-      DEVOLVER:   'Devuelto',
-      ESCALAR:    'Escalado',
-      INICIAR:    'Iniciado',
-      INICIADO:   'Iniciado',
-      RESPONDER:  'Respondido',
-      RESPONDIDO: 'Respondido'
+      APROBAR:                  'Aprobado',
+      RECHAZAR:                 'Rechazado',
+      DEVOLVER:                 'Devuelto',
+      ESCALAR:                  'Escalado',
+      INICIAR:                  'Iniciado',
+      INICIADO:                 'Iniciado',
+      RESPONDER:                'Respondido',
+      RESPONDIDO:               'Respondido',
+      TOMADO:                   'Tomado',
+      ASIGNADO_AUTO:            'Asignado automáticamente',
+      ASIGNADO_MANUAL:          'Asignado manualmente',
+      RESPONDIDO_POR_CLIENTE:   'Respondido por cliente',
+      OBSERVADO:                'Observado',
+      DENEGADO_APELAR:          'Denegado (con apelación)',
+      APELADO:                  'Apelado',
+      APELACION_APROBADA:       'Apelación aprobada',
+      APELACION_DENEGADA:       'Apelación denegada',
+      APELACION_VENCIDA:        'Apelación vencida'
     };
     return map[accion.toUpperCase()] ?? accion;
   }
@@ -957,9 +1376,10 @@ export class TramiteDetalleComponent implements OnInit, OnDestroy {
   iconoEstadoFinal(): string {
     if (!this.tramite) return 'info';
     const map: Record<string, string> = {
-      COMPLETADO: 'check_circle',
-      RECHAZADO:  'cancel',
-      CANCELADO:  'block'
+      COMPLETADO:  'check_circle',
+      RECHAZADO:   'cancel',
+      CANCELADO:   'block',
+      SIN_ASIGNAR: 'person_off'
     };
     return map[this.tramite.estado] ?? 'info';
   }

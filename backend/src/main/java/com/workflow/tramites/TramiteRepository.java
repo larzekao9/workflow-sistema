@@ -6,6 +6,8 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
+
 @Repository
 public interface TramiteRepository extends MongoRepository<Tramite, String> {
 
@@ -48,4 +50,25 @@ public interface TramiteRepository extends MongoRepository<Tramite, String> {
     long countByEtapaActual_ResponsableRolNombreAndEstado(String rolNombre, Tramite.EstadoTramite estado);
 
     long countByEstado(Tramite.EstadoTramite estado);
+
+    // --- Motor de asignación automática ---
+
+    /**
+     * Cuenta trámites activos (INICIADO, EN_PROCESO, SIN_ASIGNAR) asignados a un funcionario.
+     * Usado para determinar la carga de trabajo y elegir al funcionario con menor carga.
+     */
+    @Query(value = "{ 'asignado_a_id': ?0, 'estado': { '$in': ['INICIADO','EN_PROCESO','SIN_ASIGNAR'] } }", count = true)
+    long countActivosByAsignadoId(String userId);
+
+    /**
+     * Trámites sin asignar filtrados por rol (para bandeja de administrador).
+     */
+    Page<Tramite> findByEstadoAndEtapaActual_ResponsableRolNombre(
+            Tramite.EstadoTramite estado, String rolNombre, Pageable pageable);
+
+    /**
+     * Apelaciones vencidas: estado EN_APELACION, apelación PENDIENTE y fecha límite superada.
+     */
+    @Query("{ 'estado': 'EN_APELACION', 'apelacion.estado': 'PENDIENTE', 'apelacion.fecha_limite': { '$lt': ?0 } }")
+    List<Tramite> findApelacionesVencidas(java.time.LocalDateTime ahora);
 }

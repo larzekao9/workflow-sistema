@@ -5,6 +5,7 @@ import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   Actividad,
+  ActividadPropiedadesRequest,
   CreateActividadRequest,
   UpdateActividadRequest
 } from '../models/actividad.model';
@@ -30,6 +31,10 @@ export class ActividadService {
 
   update(id: string, data: UpdateActividadRequest): Observable<Actividad> {
     return this.http.put<Actividad>(`${this.activitiesUrl}/${id}`, data);
+  }
+
+  updatePropiedades(id: string, data: ActividadPropiedadesRequest): Observable<Actividad> {
+    return this.http.patch<Actividad>(`${this.activitiesUrl}/${id}/propiedades`, data);
   }
 
   delete(id: string): Observable<void> {

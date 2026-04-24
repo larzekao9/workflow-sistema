@@ -29,7 +29,37 @@ import java.util.List;
 public class Tramite {
 
     public enum EstadoTramite {
-        INICIADO, EN_PROCESO, COMPLETADO, RECHAZADO, CANCELADO, DEVUELTO, ESCALADO
+        INICIADO, EN_PROCESO, SIN_ASIGNAR, COMPLETADO, RECHAZADO, CANCELADO, DEVUELTO, ESCALADO, EN_APELACION
+    }
+
+    public enum EstadoApelacion { PENDIENTE, EN_REVISION, APROBADO, DENEGADO }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class Apelacion {
+        private boolean activa;
+
+        @Field("fecha_inicio")
+        private LocalDateTime fechaInicio;
+
+        @Field("fecha_limite")
+        private LocalDateTime fechaLimite;
+
+        @Field("motivo_original")
+        private String motivoOriginal;
+
+        @Field("documentos_originales")
+        private List<com.workflow.files.FileReference> documentosOriginales;
+
+        @Field("documentos_apelatoria")
+        private List<com.workflow.files.FileReference> documentosApelatoria;
+
+        @Field("justificacion_cliente")
+        private String justificacionCliente;
+
+        private EstadoApelacion estado;
     }
 
     // -----------------------------------------------------------------------
@@ -82,6 +112,12 @@ public class Tramite {
 
         @Field("observaciones")
         private String observaciones;
+
+        @Field("responsable_cargo")
+        private String responsableCargo;
+
+        @Field("documentos_adjuntos")
+        private List<com.workflow.files.FileReference> documentosAdjuntos;
     }
 
     // -----------------------------------------------------------------------
@@ -134,4 +170,7 @@ public class Tramite {
 
     @Field("fecha_vencimiento_etapa")
     private LocalDateTime fechaVencimientoEtapa;
+
+    @Field("apelacion")
+    private Apelacion apelacion;
 }

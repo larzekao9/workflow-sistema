@@ -4,7 +4,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { FormsModule } from '@angular/forms';
+import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup } from '@angular/forms';
 import { Subject, debounceTime, takeUntil, interval } from 'rxjs';
 
 import { MatButtonModule } from '@angular/material/button';
@@ -22,10 +22,13 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { PoliticaService } from '../../shared/services/politica.service';
 import { RoleService } from '../../shared/services/role.service';
 import { FormularioService } from '../../shared/services/formulario.service';
+import { ActividadService } from '../../shared/services/actividad.service';
+import { DepartmentService } from '../../shared/services/department.service';
 import { AiService } from '../../shared/services/ai.service';
 import { AuthService } from '../../shared/services/auth.service';
 import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/confirm-dialog.component';
 import { Politica } from '../../shared/models/politica.model';
+import { Actividad, AccionPermitida } from '../../shared/models/actividad.model';
 import { CollaborationService } from '../../shared/services/collaboration.service';
 import { Collaborator } from '../../shared/models/collaborator.model';
 import { BpmnUpdate } from '../../shared/services/collaboration.service';
@@ -47,7 +50,7 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
   standalone: true,
   encapsulation: ViewEncapsulation.None,
   imports: [
-    CommonModule, RouterModule, FormsModule,
+    CommonModule, RouterModule, FormsModule, ReactiveFormsModule,
     MatButtonModule, MatIconModule, MatTooltipModule, MatSnackBarModule,
     MatProgressSpinnerModule, MatSelectModule, MatFormFieldModule,
     MatInputModule, MatDividerModule, MatChipsModule, MatDialogModule
@@ -251,48 +254,163 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
     <div class="bpmn-canvas-wrap">
       <div #bpmnCanvas class="bpmn-canvas"></div>
 
-      <!-- Panel propiedades UserTask -->
-      <div class="task-props-panel" *ngIf="selectedElement && isEditable" role="complementary" aria-label="Propiedades del paso seleccionado">
+      <!-- Panel propiedades UserTask — Sprint 3.5 -->
+      <div class="task-props-panel"
+           *ngIf="selectedElement && isEditable"
+           role="complementary"
+           aria-label="Propiedades del paso seleccionado">
+
+        <!-- Header -->
         <div class="task-props-header">
           <mat-icon aria-hidden="true">tune</mat-icon>
-          <span>Propiedades del Paso</span>
+          <div class="task-props-header-text">
+            <span class="task-props-title">Propiedades del Paso</span>
+            <span class="task-props-subtitle" *ngIf="selectedElementName">{{ selectedElementName }}</span>
+          </div>
           <button mat-icon-button
-                  (click)="selectedElement = null"
+                  (click)="closePropertiesPanel()"
                   class="task-props-close"
                   aria-label="Cerrar panel de propiedades">
             <mat-icon>close</mat-icon>
           </button>
         </div>
 
-        <mat-form-field appearance="outline" class="task-props-field">
-          <mat-label>Nombre del paso</mat-label>
-          <input matInput
-                 [(ngModel)]="selectedTaskName"
-                 placeholder="Ej: Validar solicitud"
-                 aria-label="Nombre del paso" />
-        </mat-form-field>
+        <!-- Loading overlay while saving -->
+        <div class="task-props-saving" *ngIf="isSavingProps" aria-live="polite" aria-label="Guardando propiedades">
+          <mat-spinner diameter="20"></mat-spinner>
+          <span>Guardando...</span>
+        </div>
 
-        <mat-form-field appearance="outline" class="task-props-field">
-          <mat-label>Rol responsable</mat-label>
-          <mat-select [(ngModel)]="selectedTaskRol" aria-label="Rol responsable">
-            <mat-option value="FUNCIONARIO">Funcionario</mat-option>
-            <mat-option value="ADMINISTRADOR">Administrador</mat-option>
-            <mat-option value="CLIENTE">Cliente</mat-option>
-          </mat-select>
-        </mat-form-field>
+        <!-- Form body — scrollable -->
+        <div class="task-props-body" [formGroup]="propsForm">
 
-        <mat-form-field appearance="outline" class="task-props-field">
-          <mat-label>Formulario asociado</mat-label>
-          <mat-select [(ngModel)]="selectedTaskFormId" aria-label="Formulario asociado">
-            <mat-option value="">Sin formulario</mat-option>
-            <mat-option *ngFor="let f of formulariosList" [value]="f.id">{{ f.nombre }}</mat-option>
-          </mat-select>
-        </mat-form-field>
+          <!-- Nombre -->
+          <mat-form-field appearance="outline" class="task-props-field">
+            <mat-label>Nombre del paso</mat-label>
+            <input matInput
+                   formControlName="nombre"
+                   placeholder="Ej: Validar solicitud"
+                   autocomplete="off" />
+          </mat-form-field>
 
-        <button mat-raised-button color="primary" (click)="applyTaskProperties()" class="task-props-apply-btn">
-          <mat-icon>check</mat-icon>
-          Aplicar
-        </button>
+          <!-- Descripción -->
+          <mat-form-field appearance="outline" class="task-props-field">
+            <mat-label>Descripción</mat-label>
+            <textarea matInput
+                      formControlName="descripcion"
+                      rows="3"
+                      placeholder="Instrucciones para el responsable..."
+                      style="resize:none"></textarea>
+          </mat-form-field>
+
+          <div class="task-props-section-divider">Asignación</div>
+
+          <!-- Área (departamento) -->
+          <mat-form-field appearance="outline" class="task-props-field">
+            <mat-label>Área responsable</mat-label>
+            <mat-select formControlName="area"
+                        (selectionChange)="onAreaChange($event.value)"
+                        aria-label="Área responsable">
+              <mat-option value="">Sin área específica</mat-option>
+              <mat-option *ngFor="let d of departmentsList" [value]="d.id">{{ d.nombre }}</mat-option>
+            </mat-select>
+            <mat-progress-spinner *ngIf="isLoadingDepts"
+                                  matSuffix
+                                  diameter="16"
+                                  mode="indeterminate"
+                                  style="display:inline-flex;margin-right:8px">
+            </mat-progress-spinner>
+          </mat-form-field>
+
+          <!-- Cargo requerido -->
+          <mat-form-field appearance="outline" class="task-props-field">
+            <mat-label>Cargo requerido</mat-label>
+            <mat-select *ngIf="cargosList.length > 0; else cargoInput"
+                        formControlName="cargoRequerido"
+                        aria-label="Cargo requerido">
+              <mat-option value="">Sin cargo específico</mat-option>
+              <mat-option *ngFor="let c of cargosList" [value]="c">{{ c }}</mat-option>
+            </mat-select>
+            <ng-template #cargoInput>
+              <input matInput
+                     formControlName="cargoRequerido"
+                     placeholder="Ej: Supervisor, Técnico..."
+                     autocomplete="off" />
+            </ng-template>
+            <mat-hint *ngIf="cargosList.length === 0 && propsForm.get('area')?.value">
+              Selecciona un área para filtrar cargos
+            </mat-hint>
+          </mat-form-field>
+
+          <div class="task-props-section-divider">Formulario y SLA</div>
+
+          <!-- Formulario -->
+          <mat-form-field appearance="outline" class="task-props-field">
+            <mat-label>Formulario asociado</mat-label>
+            <mat-select formControlName="formularioId" aria-label="Formulario asociado">
+              <mat-option value="">Sin formulario</mat-option>
+              <mat-option *ngFor="let f of formulariosList" [value]="f.id">{{ f.nombre }}</mat-option>
+            </mat-select>
+            <mat-progress-spinner *ngIf="isLoadingForms"
+                                  matSuffix
+                                  diameter="16"
+                                  mode="indeterminate"
+                                  style="display:inline-flex;margin-right:8px">
+            </mat-progress-spinner>
+          </mat-form-field>
+
+          <!-- SLA horas -->
+          <mat-form-field appearance="outline" class="task-props-field">
+            <mat-label>SLA (horas)</mat-label>
+            <input matInput
+                   type="number"
+                   formControlName="slaHoras"
+                   placeholder="Ej: 24"
+                   min="1"
+                   max="8760" />
+            <mat-hint>Tiempo máximo para completar este paso</mat-hint>
+          </mat-form-field>
+
+          <div class="task-props-section-divider">Acciones permitidas</div>
+
+          <!-- Acciones permitidas -->
+          <mat-form-field appearance="outline" class="task-props-field">
+            <mat-label>Acciones disponibles</mat-label>
+            <mat-select formControlName="accionesPermitidas"
+                        multiple
+                        aria-label="Acciones disponibles para el responsable">
+              <mat-option value="APROBAR">Aprobar</mat-option>
+              <mat-option value="RECHAZAR">Rechazar</mat-option>
+              <mat-option value="DEVOLVER">Devolver</mat-option>
+              <mat-option value="ESCALAR">Escalar</mat-option>
+              <mat-option value="OBSERVAR">Observar</mat-option>
+              <mat-option value="DENEGAR">Denegar</mat-option>
+            </mat-select>
+            <mat-hint>Selecciona las acciones que puede tomar el responsable</mat-hint>
+          </mat-form-field>
+
+        </div><!-- /task-props-body -->
+
+        <!-- Footer actions -->
+        <div class="task-props-footer">
+          <button mat-stroked-button
+                  (click)="closePropertiesPanel()"
+                  class="task-props-cancel-btn"
+                  [disabled]="isSavingProps">
+            Cancelar
+          </button>
+          <button mat-raised-button
+                  color="primary"
+                  (click)="saveTaskProperties()"
+                  class="task-props-save-btn"
+                  [disabled]="isSavingProps || propsForm.invalid"
+                  aria-label="Guardar propiedades del paso">
+            <mat-spinner *ngIf="isSavingProps" diameter="16" style="display:inline-flex;margin-right:4px"></mat-spinner>
+            <mat-icon *ngIf="!isSavingProps">save</mat-icon>
+            Guardar
+          </button>
+        </div>
+
       </div>
     </div>
 
@@ -702,14 +820,13 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
     }
     .ai-send-btn:disabled { opacity: 0.4 !important; }
 
-    /* ── UserTask Properties Panel ──────────────────────────── */
+    /* ── UserTask Properties Panel — Sprint 3.5 ─────────────── */
     .bpmn-canvas-wrap {
       flex: 1;
       height: 100%;
       position: relative;
       overflow: hidden;
     }
-    /* El canvas ocupa todo el wrap */
     .bpmn-canvas-wrap .bpmn-canvas {
       width: 100%;
       height: 100%;
@@ -717,65 +834,132 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
     }
     .task-props-panel {
       position: absolute;
-      right: 16px;
-      top: 16px;
-      width: 280px;
+      right: 0;
+      top: 0;
+      width: 320px;
+      height: 100%;
       background: #ffffff;
-      border-radius: 8px;
-      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.18), 0 1px 4px rgba(0, 0, 0, 0.08);
-      padding: 0;
+      border-left: 1px solid #e2e8f0;
+      box-shadow: -4px 0 24px rgba(0, 0, 0, 0.12);
       z-index: 100;
       display: flex;
       flex-direction: column;
       overflow: hidden;
     }
+    /* Header */
     .task-props-header {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
       padding: 12px 12px 12px 16px;
-      background: #f8fafc;
-      border-bottom: 1px solid #e2e8f0;
-      font-size: 13px;
-      font-weight: 600;
-      color: #1e293b;
+      background: #1e3a8a;
+      border-bottom: 1px solid rgba(255,255,255,0.12);
+      flex-shrink: 0;
     }
-    .task-props-header mat-icon {
+    .task-props-header > mat-icon {
       font-size: 18px;
       width: 18px;
       height: 18px;
-      color: #2563eb;
+      color: rgba(255,255,255,0.85);
       flex-shrink: 0;
     }
-    .task-props-header span { flex: 1; }
+    .task-props-header-text {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .task-props-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: white;
+      line-height: 1.2;
+    }
+    .task-props-subtitle {
+      font-size: 11px;
+      color: rgba(255,255,255,0.65);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 2px;
+    }
     .task-props-close {
       width: 32px !important;
       height: 32px !important;
       line-height: 32px !important;
-      color: #64748b !important;
+      color: rgba(255,255,255,0.7) !important;
       flex-shrink: 0;
     }
-    .task-props-close:hover { color: #1e293b !important; }
+    .task-props-close:hover { color: white !important; }
     .task-props-close mat-icon { font-size: 18px; width: 18px; height: 18px; }
+    /* Saving indicator */
+    .task-props-saving {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      background: #eff6ff;
+      border-bottom: 1px solid #bfdbfe;
+      font-size: 12px;
+      color: #1d4ed8;
+      flex-shrink: 0;
+    }
+    /* Scrollable body */
+    .task-props-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 0 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .task-props-body::-webkit-scrollbar { width: 4px; }
+    .task-props-body::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
+    /* Section divider label */
+    .task-props-section-divider {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #94a3b8;
+      padding: 8px 16px 4px;
+      margin-top: 4px;
+    }
+    /* Form fields */
     .task-props-field {
       width: 100%;
       padding: 0 16px;
+      box-sizing: border-box;
     }
-    /* Primer campo: margen superior */
-    .task-props-field:first-of-type { margin-top: 16px; }
-    .task-props-apply-btn {
-      width: calc(100% - 32px) !important;
-      margin: 4px 16px 16px !important;
+    .task-props-field .mat-mdc-form-field-subscript-wrapper {
+      padding-bottom: 2px;
+    }
+    /* Footer */
+    .task-props-footer {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      border-top: 1px solid #e2e8f0;
+      background: #f8fafc;
+      flex-shrink: 0;
+    }
+    .task-props-cancel-btn {
+      flex: 1;
+      font-size: 13px !important;
+      height: 36px !important;
+      color: #64748b !important;
+      border-color: #e2e8f0 !important;
+    }
+    .task-props-save-btn {
+      flex: 2;
       font-size: 13px !important;
       height: 36px !important;
     }
-    /* Responsive: en pantallas pequeñas el panel se adapta */
+    /* Responsive */
     @media (max-width: 768px) {
       .task-props-panel {
-        right: 8px;
-        top: 8px;
-        width: calc(100vw - 16px);
-        max-width: 280px;
+        width: min(320px, 100vw);
       }
     }
   `]
@@ -808,12 +992,21 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
   localBpmnVersion = 0;
   private isApplyingRemoteUpdate = false;
 
-  // --- Panel propiedades UserTask ---
+  // --- Panel propiedades UserTask — Sprint 3.5 ---
   selectedElement: object | null = null;
-  selectedTaskName = '';
-  selectedTaskRol = 'FUNCIONARIO';
-  selectedTaskFormId = '';
+  selectedElementName = '';
+  /** Actividad del backend que corresponde al elemento seleccionado (match por nombre o por id). */
+  selectedActividad: Actividad | null = null;
+  isSavingProps = false;
+  isLoadingDepts = false;
+  isLoadingForms = false;
+
+  propsForm!: FormGroup;
+  departmentsList: { id: string; nombre: string }[] = [];
+  cargosList: string[] = [];
   formulariosList: { id: string; nombre: string }[] = [];
+  /** Actividades cargadas desde el backend para esta política. */
+  activitiesList: Actividad[] = [];
 
   // AI Chat panel
   showAiPanel = false;
@@ -835,13 +1028,26 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
     private politicaService: PoliticaService,
     private roleService: RoleService,
     private formularioService: FormularioService,
+    private actividadService: ActividadService,
+    private departmentService: DepartmentService,
     private aiService: AiService,
     private snackBar: MatSnackBar,
     private dialog: MatDialog,
     private cdr: ChangeDetectorRef,
     private collaborationService: CollaborationService,
-    private authService: AuthService
-  ) {}
+    private authService: AuthService,
+    private fb: FormBuilder
+  ) {
+    this.propsForm = this.fb.group({
+      nombre:            [''],
+      descripcion:       [''],
+      area:              [''],
+      cargoRequerido:    [''],
+      formularioId:      [''],
+      slaHoras:          [null],
+      accionesPermitidas: [[]]
+    });
+  }
 
   ngOnInit(): void {
     this.politicaId = this.route.snapshot.paramMap.get('id');
@@ -852,6 +1058,7 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
     this.currentUserEmail = this.authService.getCurrentUser()?.email ?? null;
     this.loadData();
     this.loadFormularios();
+    this.loadDepartments();
 
     // Auto-save 2 segundos despues del ultimo cambio
     this.autoSave$.pipe(
@@ -903,6 +1110,9 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
         this.isLoading = false;      // canvas entra al DOM antes de que bpmn-js lo necesite
         this.cdr.detectChanges();    // fuerza renderizado del *ngIf
         setTimeout(() => this.initBpmnModeler(), 50);
+
+        // Load activities for the properties panel
+        this.loadActividades();
 
         // BORRADOR e INACTIVA → el editor colaborativo aplica
         // join() actualiza collaborators$ internamente; el componente recibe vía suscripción
@@ -971,30 +1181,24 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
           this.cdr.detectChanges();
         });
 
-        // Seleccion de elemento: mostrar panel propiedades para UserTask/Task
+        // Seleccion de elemento: mostrar panel propiedades solo para UserTask
         this.modeler.on('selection.changed', (e: any) => {
           const elements: any[] = e.newSelection ?? [];
           if (elements.length === 1) {
             const el = elements[0];
             const elType: string = el.type ?? '';
-            if (elType.toLowerCase().includes('task')) {
+            if (elType === 'bpmn:UserTask' || elType.toLowerCase().includes('task')) {
               this.selectedElement = el;
-              this.selectedTaskName = (el.businessObject?.name as string) ?? '';
-              // Leer documentation actual
-              const docs: any[] = el.businessObject?.documentation ?? [];
-              const docText: string = docs.length > 0 ? ((docs[0].text ?? docs[0].$body ?? '') as string) : '';
-              // Extraer rol: patrón "ROL:FUNCIONARIO"
-              const rolMatch = docText.match(/ROL:(\w+)/i);
-              this.selectedTaskRol = rolMatch ? rolMatch[1].toUpperCase() : 'FUNCIONARIO';
-              // Extraer formulario: patrón "FORM:{id}"
-              const formMatch = docText.match(/FORM:([a-zA-Z0-9]+)/i);
-              this.selectedTaskFormId = formMatch ? formMatch[1] : '';
+              this.selectedElementName = (el.businessObject?.name as string) ?? el.id ?? '';
+              this.populatePropsForm(el);
               this.cdr.detectChanges();
               return;
             }
           }
           // Deseleccion o elemento no es task
           this.selectedElement = null;
+          this.selectedActividad = null;
+          this.selectedElementName = '';
           this.cdr.detectChanges();
         });
       }
@@ -1343,42 +1547,228 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
     }, 50);
   }
 
-  // ── UserTask Properties Panel ──────────────────────────────
+  // ── UserTask Properties Panel — Sprint 3.5 ────────────────
 
   private loadFormularios(): void {
+    this.isLoadingForms = true;
     this.formularioService.getAll({ page: 0, size: 100 }).pipe(
       takeUntil(this.destroy$)
     ).subscribe({
       next: (page) => {
         this.formulariosList = page.content.map(f => ({ id: f.id, nombre: f.nombre }));
+        this.isLoadingForms = false;
+        this.cdr.detectChanges();
       },
       error: (err) => {
         console.error('Error cargando formularios para el panel:', err);
+        this.isLoadingForms = false;
+        this.cdr.detectChanges();
       }
     });
   }
 
-  applyTaskProperties(): void {
-    if (!this.selectedElement || !this.modeler || !this.isEditable) return;
+  private loadDepartments(): void {
+    this.isLoadingDepts = true;
+    this.departmentService.getAll().pipe(
+      takeUntil(this.destroy$)
+    ).subscribe({
+      next: (depts) => {
+        this.departmentsList = depts.map(d => ({ id: d.id, nombre: d.nombre }));
+        this.isLoadingDepts = false;
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        console.error('Error cargando departamentos para el panel:', err);
+        this.isLoadingDepts = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
 
+  private loadActividades(): void {
+    if (!this.politicaId) return;
+    this.actividadService.getByPolitica(this.politicaId).pipe(
+      takeUntil(this.destroy$)
+    ).subscribe({
+      next: (acts) => {
+        this.activitiesList = acts;
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        console.error('Error cargando actividades:', err);
+      }
+    });
+  }
+
+  /**
+   * Populates the reactive form with data from the selected BPMN element.
+   * Tries to match the bpmn element to a backend Actividad by name.
+   * If no match is found, pre-fills with what's available in the BPMN element.
+   */
+  private populatePropsForm(el: object & { businessObject?: Record<string, unknown>; id?: string }): void {
+    const boName: string = (el.businessObject?.['name'] as string) ?? '';
+
+    // Try to find the matching backend Actividad by name (case-insensitive trim)
+    const matchedActividad = this.activitiesList.find(
+      a => a.nombre?.trim().toLowerCase() === boName.trim().toLowerCase()
+    ) ?? null;
+    this.selectedActividad = matchedActividad;
+
+    // Extract form reference from BPMN documentation block
+    const docs: Array<Record<string, unknown>> =
+      (el.businessObject?.['documentation'] as Array<Record<string, unknown>>) ?? [];
+    const docText: string = docs.length > 0
+      ? ((docs[0]['text'] ?? docs[0]['$body'] ?? '') as string)
+      : '';
+    const formMatch = docText.match(/FORM:([a-zA-Z0-9]+)/i);
+    const docFormId: string = formMatch ? formMatch[1] : '';
+
+    if (matchedActividad) {
+      // Use backend data as source of truth
+      const areaId = matchedActividad.departmentId ?? '';
+      this.propsForm.patchValue({
+        nombre:            matchedActividad.nombre ?? boName,
+        descripcion:       matchedActividad.descripcion ?? '',
+        area:              areaId,
+        cargoRequerido:    matchedActividad.cargoRequerido ?? '',
+        formularioId:      matchedActividad.formularioId ?? docFormId,
+        slaHoras:          matchedActividad.tiempoLimiteHoras ?? null,
+        accionesPermitidas: matchedActividad.accionesPermitidas ?? []
+      }, { emitEvent: false });
+
+      // Load cargos for the area if one is set
+      if (areaId) {
+        this.loadCargosForArea(areaId);
+      } else {
+        this.cargosList = [];
+      }
+    } else {
+      // No backend match: prefill from BPMN XML only
+      this.propsForm.patchValue({
+        nombre:            boName,
+        descripcion:       '',
+        area:              '',
+        cargoRequerido:    '',
+        formularioId:      docFormId,
+        slaHoras:          null,
+        accionesPermitidas: []
+      }, { emitEvent: false });
+      this.cargosList = [];
+    }
+
+    this.cdr.detectChanges();
+  }
+
+  onAreaChange(departmentId: string): void {
+    this.propsForm.patchValue({ cargoRequerido: '' }, { emitEvent: false });
+    this.cargosList = [];
+    if (departmentId) {
+      this.loadCargosForArea(departmentId);
+    }
+  }
+
+  private loadCargosForArea(departmentId: string): void {
+    this.departmentService.getCargosByDepartamento(departmentId).pipe(
+      takeUntil(this.destroy$)
+    ).subscribe({
+      next: (cargos) => {
+        this.cargosList = cargos;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.cargosList = [];
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  closePropertiesPanel(): void {
+    this.selectedElement = null;
+    this.selectedActividad = null;
+    this.selectedElementName = '';
+    this.cargosList = [];
+    this.cdr.detectChanges();
+  }
+
+  saveTaskProperties(): void {
+    if (!this.selectedElement || !this.modeler || !this.isEditable) return;
+    if (this.propsForm.invalid) return;
+
+    const formValue = this.propsForm.value as {
+      nombre: string;
+      descripcion: string;
+      area: string;
+      cargoRequerido: string;
+      formularioId: string;
+      slaHoras: number | null;
+      accionesPermitidas: AccionPermitida[];
+    };
+
+    this.isSavingProps = true;
+    this.cdr.detectChanges();
+
+    // 1. Update the BPMN element name + documentation in the modeler
     const modeling = this.modeler.get('modeling');
     const moddle = this.modeler.get('moddle');
 
-    // Construir texto de documentation con rol y formulario opcional
-    let docText = `ROL:${this.selectedTaskRol}`;
-    if (this.selectedTaskFormId) {
-      docText += `\nFORM:${this.selectedTaskFormId}`;
+    let docText = '';
+    if (formValue.formularioId) {
+      docText += `FORM:${formValue.formularioId}`;
     }
 
     const docElement = moddle.create('bpmn:Documentation', { text: docText });
-
     modeling.updateProperties(this.selectedElement, {
-      name: this.selectedTaskName,
-      documentation: [docElement]
+      name: formValue.nombre,
+      documentation: docText ? [docElement] : []
     });
-
     this.isDirty = true;
-    this.snackBar.open('Propiedades actualizadas', '', { duration: 1500 });
+    this.autoSave$.next();
+
+    // 2. Persist to backend if we have a matching actividad
+    if (this.selectedActividad?.id) {
+      this.actividadService.updatePropiedades(this.selectedActividad.id, {
+        nombre:            formValue.nombre || undefined,
+        descripcion:       formValue.descripcion || undefined,
+        area:              formValue.area || undefined,
+        cargoRequerido:    formValue.cargoRequerido || undefined,
+        formularioId:      formValue.formularioId || undefined,
+        slaHoras:          formValue.slaHoras ?? undefined,
+        accionesPermitidas: formValue.accionesPermitidas.length > 0 ? formValue.accionesPermitidas : undefined
+      }).pipe(takeUntil(this.destroy$)).subscribe({
+        next: (updated) => {
+          // Update local activities list with new data
+          const idx = this.activitiesList.findIndex(a => a.id === updated.id);
+          if (idx !== -1) {
+            this.activitiesList[idx] = updated;
+            this.selectedActividad = updated;
+          }
+          this.isSavingProps = false;
+          this.selectedElementName = formValue.nombre || this.selectedElementName;
+          this.snackBar.open('Propiedades guardadas', 'Cerrar', { duration: 2500 });
+          this.cdr.detectChanges();
+        },
+        error: (err) => {
+          this.isSavingProps = false;
+          console.error('Error guardando propiedades de actividad:', err);
+          this.snackBar.open(
+            err?.error?.message || 'Error al guardar las propiedades',
+            'Cerrar',
+            { duration: 4000 }
+          );
+          this.cdr.detectChanges();
+        }
+      });
+    } else {
+      // No backend actividad yet — only the BPMN XML change was applied
+      this.isSavingProps = false;
+      this.selectedElementName = formValue.nombre || this.selectedElementName;
+      this.snackBar.open(
+        'Nombre actualizado en el diagrama. Guarda el diagrama para persistir.',
+        'Cerrar',
+        { duration: 3500 }
+      );
+      this.cdr.detectChanges();
+    }
   }
 
   // ── Nombre editable inline ─────────────────────────────────
@@ -1446,6 +1836,9 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
     if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === 'H') {
       event.preventDefault();
       this.fitViewport();
+    }
+    if (event.key === 'Escape' && this.selectedElement) {
+      this.closePropertiesPanel();
     }
   }
 }

@@ -1,5 +1,9 @@
 package com.workflow.tramites;
 
+import com.workflow.activities.Actividad;
+import com.workflow.activities.ActividadRepository;
+import com.workflow.files.FileReference;
+import com.workflow.files.FileStorageService;
 import com.workflow.forms.FormularioRepository;
 import com.workflow.policies.Politica;
 import com.workflow.policies.PoliticaRepository;
@@ -19,6 +23,8 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -31,6 +37,8 @@ public class TramiteService {
     private final RoleRepository roleRepository;
     private final FormularioRepository formularioRepository;
     private final BpmnMotorService bpmnMotorService;
+    private final ActividadRepository actividadRepository;
+    private final FileStorageService fileStorageService;
 
     // -----------------------------------------------------------------------
     // Crear trámite
@@ -98,6 +106,18 @@ public class TramiteService {
 
         Tramite guardado = tramiteRepository.save(tramite);
         log.info("[TramiteService] Trámite creado: {} para política: {}", guardado.getId(), politicaId);
+
+        // Intenta asignar funcionario automáticamente si la primera tarea es de FUNCIONARIO.
+        // Solo persiste de nuevo si la asignación automática modificó el documento.
+        String asignadoAntes = guardado.getAsignadoAId();
+        Tramite.EstadoTramite estadoAntes = guardado.getEstado();
+        asignarFuncionarioAutomatico(guardado, primeraTask.id(), primeraTask.name());
+        boolean cambio = !java.util.Objects.equals(asignadoAntes, guardado.getAsignadoAId())
+                || estadoAntes != guardado.getEstado();
+        if (cambio) {
+            guardado = tramiteRepository.save(guardado);
+        }
+
         return TramiteResponse.fromDocument(guardado);
     }
 
@@ -177,11 +197,13 @@ public class TramiteService {
                     .total(tramiteRepository.count())
                     .iniciados(tramiteRepository.countByEstado(Tramite.EstadoTramite.INICIADO))
                     .enProceso(tramiteRepository.countByEstado(Tramite.EstadoTramite.EN_PROCESO))
+                    .sinAsignar(tramiteRepository.countByEstado(Tramite.EstadoTramite.SIN_ASIGNAR))
                     .completados(tramiteRepository.countByEstado(Tramite.EstadoTramite.COMPLETADO))
                     .rechazados(tramiteRepository.countByEstado(Tramite.EstadoTramite.RECHAZADO))
                     .devueltos(tramiteRepository.countByEstado(Tramite.EstadoTramite.DEVUELTO))
                     .escalados(tramiteRepository.countByEstado(Tramite.EstadoTramite.ESCALADO))
                     .cancelados(tramiteRepository.countByEstado(Tramite.EstadoTramite.CANCELADO))
+                    .enApelacion(tramiteRepository.countByEstado(Tramite.EstadoTramite.EN_APELACION))
                     .build();
         }
 
@@ -197,6 +219,7 @@ public class TramiteService {
                     .total(total)
                     .iniciados(tramiteRepository.countByEtapaActual_ResponsableRolNombreAndEstado(rolNombre, Tramite.EstadoTramite.INICIADO))
                     .enProceso(tramiteRepository.countByEtapaActual_ResponsableRolNombreAndEstado(rolNombre, Tramite.EstadoTramite.EN_PROCESO))
+                    .sinAsignar(tramiteRepository.countByEtapaActual_ResponsableRolNombreAndEstado(rolNombre, Tramite.EstadoTramite.SIN_ASIGNAR))
                     .completados(tramiteRepository.countByEtapaActual_ResponsableRolNombreAndEstado(rolNombre, Tramite.EstadoTramite.COMPLETADO))
                     .rechazados(tramiteRepository.countByEtapaActual_ResponsableRolNombreAndEstado(rolNombre, Tramite.EstadoTramite.RECHAZADO))
                     .devueltos(tramiteRepository.countByEtapaActual_ResponsableRolNombreAndEstado(rolNombre, Tramite.EstadoTramite.DEVUELTO))
@@ -211,6 +234,7 @@ public class TramiteService {
                 .total(total)
                 .iniciados(tramiteRepository.countByClienteIdAndEstado(userId, Tramite.EstadoTramite.INICIADO))
                 .enProceso(tramiteRepository.countByClienteIdAndEstado(userId, Tramite.EstadoTramite.EN_PROCESO))
+                .sinAsignar(0L)
                 .completados(tramiteRepository.countByClienteIdAndEstado(userId, Tramite.EstadoTramite.COMPLETADO))
                 .rechazados(tramiteRepository.countByClienteIdAndEstado(userId, Tramite.EstadoTramite.RECHAZADO))
                 .devueltos(tramiteRepository.countByClienteIdAndEstado(userId, Tramite.EstadoTramite.DEVUELTO))
@@ -421,12 +445,25 @@ public class TramiteService {
             tramite.setEstado(Tramite.EstadoTramite.EN_PROCESO);
             log.info("[TramiteService] Trámite {} avanzó a etapa '{}' (rol: {})",
                     tramite.getId(), siguienteTask.name(), nuevoRol);
+
+            // Limpia la asignación anterior e intenta reasignar automáticamente para la nueva etapa
+            tramite.setAsignadoAId(null);
+            tramite.setAsignadoANombre(null);
+            asignarFuncionarioAutomatico(tramite, siguienteTask.id(), siguienteTask.name());
         }
     }
 
     private void agregarHistorial(Tramite tramite, String actividadBpmnId, String actividadNombre,
                                    String responsableId, String responsableNombre,
                                    String accion, String observaciones, LocalDateTime timestamp) {
+        agregarHistorial(tramite, actividadBpmnId, actividadNombre, responsableId, responsableNombre,
+                accion, observaciones, timestamp, null, null);
+    }
+
+    private void agregarHistorial(Tramite tramite, String actividadBpmnId, String actividadNombre,
+                                   String responsableId, String responsableNombre,
+                                   String accion, String observaciones, LocalDateTime timestamp,
+                                   String responsableCargo, List<FileReference> documentosAdjuntos) {
         if (tramite.getHistorial() == null) {
             tramite.setHistorial(new ArrayList<>());
         }
@@ -438,6 +475,8 @@ public class TramiteService {
                 .accion(accion)
                 .timestamp(timestamp)
                 .observaciones(observaciones)
+                .responsableCargo(responsableCargo)
+                .documentosAdjuntos(documentosAdjuntos)
                 .build());
     }
 
@@ -474,5 +513,438 @@ public class TramiteService {
         return roleRepository.findById(usuario.getRolId())
                 .map(Role::getNombre)
                 .orElse("CLIENTE");
+    }
+
+    // -----------------------------------------------------------------------
+    // Motor de asignación automática
+    // -----------------------------------------------------------------------
+
+    /**
+     * Intenta asignar el funcionario de menor carga al trámite dado.
+     *
+     * Lógica:
+     * 1. Busca la Actividad por politicaId + nombre del task BPMN para obtener departmentId y cargoRequerido.
+     * 2. Si no hay departmentId o cargoRequerido configurados en la actividad, no asigna (falla silenciosa).
+     * 3. Busca funcionarios activos con empresa + departamento + cargo coincidentes.
+     * 4. Filtra solo los que tengan rol FUNCIONARIO.
+     * 5. Si ninguno → estado SIN_ASIGNAR.
+     * 6. Si uno → asigna directo.
+     * 7. Si varios → asigna el de menor carga (countActivosByAsignadoId).
+     * 8. Registra historial con acción ASIGNADO_AUTO.
+     *
+     * El trámite se muta en memoria; el caller es responsable de persistir.
+     */
+    private void asignarFuncionarioAutomatico(Tramite tramite, String bpmnTaskId, String bpmnTaskNombre) {
+        // 1. Busca la Actividad para obtener los criterios de asignación
+        Actividad actividad = actividadRepository
+                .findByPoliticaIdAndNombre(tramite.getPoliticaId(), bpmnTaskNombre)
+                .orElse(null);
+
+        if (actividad == null) {
+            log.debug("[AsignacionAuto] No se encontró Actividad para politica={} nombre='{}'",
+                    tramite.getPoliticaId(), bpmnTaskNombre);
+            return;
+        }
+
+        String departmentId = actividad.getDepartmentId();
+        String cargoRequerido = actividad.getCargoRequerido();
+
+        // 2. Si no están configurados los criterios, no asignar (sin error)
+        if (departmentId == null || departmentId.isBlank()
+                || cargoRequerido == null || cargoRequerido.isBlank()) {
+            log.debug("[AsignacionAuto] Actividad '{}' sin departmentId/cargoRequerido configurado — sin asignación automática",
+                    bpmnTaskNombre);
+            return;
+        }
+
+        // Obtiene empresaId del cliente que inició el trámite para filtrar dentro de la misma empresa
+        String empresaId = userRepository.findById(tramite.getClienteId())
+                .map(User::getEmpresaId)
+                .orElse(null);
+
+        // 3. Busca candidatos: empresa + departamento + cargo + activo
+        List<User> candidatos;
+        if (empresaId != null && !empresaId.isBlank()) {
+            candidatos = userRepository.findByEmpresaIdAndDepartmentIdAndCargoAndActivoTrue(
+                    empresaId, departmentId, cargoRequerido);
+        } else {
+            // Sin empresa definida: filtra solo por departamento + cargo (instalación sin multi-tenant)
+            candidatos = userRepository.findByDepartmentIdAndActivoTrue(departmentId)
+                    .stream()
+                    .filter(u -> cargoRequerido.equalsIgnoreCase(u.getCargo()))
+                    .toList();
+        }
+
+        // 4. Filtra solo los que tengan rol FUNCIONARIO
+        String rolFuncionarioId = roleRepository.findByNombre("FUNCIONARIO")
+                .map(Role::getId)
+                .orElse(null);
+
+        if (rolFuncionarioId != null) {
+            final String rolId = rolFuncionarioId;
+            candidatos = candidatos.stream()
+                    .filter(u -> rolId.equals(u.getRolId()))
+                    .toList();
+        }
+
+        if (candidatos.isEmpty()) {
+            // 5. Sin candidatos → marcar como SIN_ASIGNAR
+            tramite.setEstado(Tramite.EstadoTramite.SIN_ASIGNAR);
+            log.warn("[AsignacionAuto] Trámite {} marcado SIN_ASIGNAR — ningún funcionario con dept={} cargo='{}'",
+                    tramite.getId(), departmentId, cargoRequerido);
+            return;
+        }
+
+        // 6 & 7. Elige el candidato de menor carga activa
+        User elegido;
+        if (candidatos.size() == 1) {
+            elegido = candidatos.get(0);
+        } else {
+            elegido = candidatos.stream()
+                    .min(Comparator.comparingLong(u ->
+                            tramiteRepository.countActivosByAsignadoId(u.getId())))
+                    .orElse(candidatos.get(0));
+        }
+
+        // 8. Asigna y registra historial
+        LocalDateTime ahora = LocalDateTime.now();
+        tramite.setAsignadoAId(elegido.getId());
+        tramite.setAsignadoANombre(
+                elegido.getNombreCompleto() != null ? elegido.getNombreCompleto() : elegido.getEmail());
+        agregarHistorial(tramite, bpmnTaskId, bpmnTaskNombre,
+                elegido.getId(), tramite.getAsignadoANombre(),
+                "ASIGNADO_AUTO",
+                "Asignación automática por menor carga (dept=" + departmentId + ", cargo=" + cargoRequerido + ")",
+                ahora);
+
+        log.info("[AsignacionAuto] Trámite {} asignado automáticamente a {} ({})",
+                tramite.getId(), elegido.getId(), tramite.getAsignadoANombre());
+    }
+
+    // -----------------------------------------------------------------------
+    // Listar trámites SIN_ASIGNAR (bandeja de administrador)
+    // -----------------------------------------------------------------------
+
+    /**
+     * Retorna los trámites en estado SIN_ASIGNAR paginados.
+     * Solo accesible por ADMINISTRADOR/SUPERADMIN (el control de acceso se aplica en el Controller).
+     */
+    public Page<TramiteResponse> getTramitesSinAsignar(int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by("creado_en").descending());
+        return tramiteRepository
+                .findByEstado(Tramite.EstadoTramite.SIN_ASIGNAR, pageable)
+                .map(TramiteResponse::fromDocument);
+    }
+
+    // -----------------------------------------------------------------------
+    // Asignación manual por administrador
+    // -----------------------------------------------------------------------
+
+    /**
+     * Asigna manualmente un funcionario a un trámite específico.
+     * Válido para cualquier estado activo (no final).
+     * Genera entrada en historial con acción ASIGNADO_MANUAL.
+     */
+    public TramiteResponse asignarManual(String tramiteId, String funcionarioId) {
+        Tramite tramite = tramiteRepository.findById(tramiteId)
+                .orElseThrow(() -> new ResourceNotFoundException("Trámite no encontrado: " + tramiteId));
+
+        if (tramite.getEstado() == Tramite.EstadoTramite.COMPLETADO
+                || tramite.getEstado() == Tramite.EstadoTramite.RECHAZADO
+                || tramite.getEstado() == Tramite.EstadoTramite.CANCELADO) {
+            throw new BadRequestException("No se puede asignar un trámite en estado final: " + tramite.getEstado());
+        }
+
+        User funcionario = userRepository.findById(funcionarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Funcionario no encontrado: " + funcionarioId));
+
+        String nombreFuncionario = funcionario.getNombreCompleto() != null
+                ? funcionario.getNombreCompleto()
+                : funcionario.getEmail();
+
+        LocalDateTime ahora = LocalDateTime.now();
+        tramite.setAsignadoAId(funcionarioId);
+        tramite.setAsignadoANombre(nombreFuncionario);
+
+        // Si estaba SIN_ASIGNAR, pasa a EN_PROCESO al ser asignado manualmente
+        if (tramite.getEstado() == Tramite.EstadoTramite.SIN_ASIGNAR) {
+            tramite.setEstado(Tramite.EstadoTramite.EN_PROCESO);
+        }
+
+        tramite.setActualizadoEn(ahora);
+        agregarHistorial(tramite,
+                tramite.getEtapaActual() != null ? tramite.getEtapaActual().getActividadBpmnId() : null,
+                tramite.getEtapaActual() != null ? tramite.getEtapaActual().getNombre() : null,
+                funcionarioId, nombreFuncionario,
+                "ASIGNADO_MANUAL",
+                "Asignación manual por administrador",
+                ahora);
+
+        log.info("[TramiteService] Trámite {} asignado manualmente a {} por administrador", tramiteId, funcionarioId);
+        return TramiteResponse.fromDocument(tramiteRepository.save(tramite));
+    }
+
+    // -----------------------------------------------------------------------
+    // Sprint 3.4 — Módulo de apelaciones
+    // -----------------------------------------------------------------------
+
+    /**
+     * Dado una lista de IDs de archivos, retorna los FileReference correspondientes.
+     * Los IDs que no existan en disco son silenciosamente ignorados (log de advertencia en FileStorageService).
+     */
+    private List<FileReference> resolveFileReferences(List<String> ids) {
+        if (ids == null || ids.isEmpty()) return new ArrayList<>();
+        return ids.stream()
+                .map(fileStorageService::getFileReference)
+                .filter(java.util.Optional::isPresent)
+                .map(java.util.Optional::get)
+                .toList();
+    }
+
+    /**
+     * Observar un trámite: el funcionario registra una observación formal y coloca el trámite en estado EN_APELACION,
+     * dando al cliente un plazo de 2 días para apelar.
+     */
+    public TramiteResponse observar(String tramiteId, String funcionarioId, ObservarDenegarRequest req) {
+        Tramite tramite = tramiteRepository.findById(tramiteId)
+                .orElseThrow(() -> new ResourceNotFoundException("Trámite no encontrado: " + tramiteId));
+
+        validarNoEstadoFinal(tramite);
+
+        User funcionario = userRepository.findById(funcionarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Funcionario no encontrado: " + funcionarioId));
+        String nombreFuncionario = funcionario.getNombreCompleto() != null
+                ? funcionario.getNombreCompleto() : funcionario.getEmail();
+        String cargoFuncionario = funcionario.getCargo();
+
+        LocalDateTime ahora = LocalDateTime.now();
+        List<FileReference> docsOriginales = resolveFileReferences(req.getDocumentosIds());
+
+        Tramite.Apelacion apelacion = Tramite.Apelacion.builder()
+                .activa(true)
+                .fechaInicio(ahora)
+                .fechaLimite(ahora.plusDays(2))
+                .motivoOriginal(req.getMotivo())
+                .documentosOriginales(docsOriginales)
+                .documentosApelatoria(new ArrayList<>())
+                .estado(Tramite.EstadoApelacion.PENDIENTE)
+                .build();
+
+        tramite.setEstado(Tramite.EstadoTramite.EN_APELACION);
+        tramite.setApelacion(apelacion);
+        tramite.setActualizadoEn(ahora);
+
+        String actividadBpmnId = tramite.getEtapaActual() != null ? tramite.getEtapaActual().getActividadBpmnId() : null;
+        String actividadNombre = tramite.getEtapaActual() != null ? tramite.getEtapaActual().getNombre() : null;
+        agregarHistorial(tramite, actividadBpmnId, actividadNombre,
+                funcionarioId, nombreFuncionario, "OBSERVADO", req.getMotivo(), ahora,
+                cargoFuncionario, docsOriginales.isEmpty() ? null : docsOriginales);
+
+        log.info("[TramiteService] Trámite {} OBSERVADO por funcionario {} — plazo apelación: {}",
+                tramiteId, funcionarioId, apelacion.getFechaLimite());
+        return TramiteResponse.fromDocument(tramiteRepository.save(tramite));
+    }
+
+    /**
+     * Denegar con posibilidad de apelación: igual que observar pero con acción DENEGADO_APELAR.
+     */
+    public TramiteResponse denegar(String tramiteId, String funcionarioId, ObservarDenegarRequest req) {
+        Tramite tramite = tramiteRepository.findById(tramiteId)
+                .orElseThrow(() -> new ResourceNotFoundException("Trámite no encontrado: " + tramiteId));
+
+        validarNoEstadoFinal(tramite);
+
+        User funcionario = userRepository.findById(funcionarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Funcionario no encontrado: " + funcionarioId));
+        String nombreFuncionario = funcionario.getNombreCompleto() != null
+                ? funcionario.getNombreCompleto() : funcionario.getEmail();
+        String cargoFuncionario = funcionario.getCargo();
+
+        LocalDateTime ahora = LocalDateTime.now();
+        List<FileReference> docsOriginales = resolveFileReferences(req.getDocumentosIds());
+
+        Tramite.Apelacion apelacion = Tramite.Apelacion.builder()
+                .activa(true)
+                .fechaInicio(ahora)
+                .fechaLimite(ahora.plusDays(2))
+                .motivoOriginal(req.getMotivo())
+                .documentosOriginales(docsOriginales)
+                .documentosApelatoria(new ArrayList<>())
+                .estado(Tramite.EstadoApelacion.PENDIENTE)
+                .build();
+
+        tramite.setEstado(Tramite.EstadoTramite.EN_APELACION);
+        tramite.setApelacion(apelacion);
+        tramite.setActualizadoEn(ahora);
+
+        String actividadBpmnId = tramite.getEtapaActual() != null ? tramite.getEtapaActual().getActividadBpmnId() : null;
+        String actividadNombre = tramite.getEtapaActual() != null ? tramite.getEtapaActual().getNombre() : null;
+        agregarHistorial(tramite, actividadBpmnId, actividadNombre,
+                funcionarioId, nombreFuncionario, "DENEGADO_APELAR", req.getMotivo(), ahora,
+                cargoFuncionario, docsOriginales.isEmpty() ? null : docsOriginales);
+
+        log.info("[TramiteService] Trámite {} DENEGADO_APELAR por funcionario {} — plazo: {}",
+                tramiteId, funcionarioId, apelacion.getFechaLimite());
+        return TramiteResponse.fromDocument(tramiteRepository.save(tramite));
+    }
+
+    /**
+     * El cliente presenta su apelación con justificación y documentos de respaldo.
+     * Solo válido dentro del plazo establecido.
+     */
+    public TramiteResponse apelar(String tramiteId, String clienteId, ApelarRequest req) {
+        Tramite tramite = tramiteRepository.findById(tramiteId)
+                .orElseThrow(() -> new ResourceNotFoundException("Trámite no encontrado: " + tramiteId));
+
+        if (tramite.getEstado() != Tramite.EstadoTramite.EN_APELACION) {
+            throw new BadRequestException("El trámite no está en estado EN_APELACION: " + tramite.getEstado());
+        }
+
+        Tramite.Apelacion apelacion = tramite.getApelacion();
+        if (apelacion == null) {
+            throw new BadRequestException("El trámite no tiene apelación activa");
+        }
+
+        if (!apelacion.getFechaLimite().isAfter(LocalDateTime.now())) {
+            throw new BadRequestException("Plazo de apelación vencido. Fecha límite: " + apelacion.getFechaLimite());
+        }
+
+        if (!clienteId.equals(tramite.getClienteId())) {
+            throw new BadRequestException("Solo el cliente titular puede apelar este trámite");
+        }
+
+        LocalDateTime ahora = LocalDateTime.now();
+        List<FileReference> docsApelatoria = resolveFileReferences(req.getDocumentosIds());
+
+        apelacion.setDocumentosApelatoria(docsApelatoria);
+        apelacion.setJustificacionCliente(req.getJustificacion());
+        apelacion.setEstado(Tramite.EstadoApelacion.EN_REVISION);
+        tramite.setActualizadoEn(ahora);
+
+        String actividadBpmnId = tramite.getEtapaActual() != null ? tramite.getEtapaActual().getActividadBpmnId() : null;
+        String actividadNombre = tramite.getEtapaActual() != null ? tramite.getEtapaActual().getNombre() : null;
+
+        String nombreCliente = resolverNombreUsuario(clienteId);
+        agregarHistorial(tramite, actividadBpmnId, actividadNombre,
+                clienteId, nombreCliente, "APELADO", req.getJustificacion(), ahora,
+                null, docsApelatoria.isEmpty() ? null : docsApelatoria);
+
+        // Reasigna revisor automáticamente para que un funcionario atienda la apelación
+        if (actividadBpmnId != null) {
+            tramite.setAsignadoAId(null);
+            tramite.setAsignadoANombre(null);
+            asignarFuncionarioAutomatico(tramite, actividadBpmnId, actividadNombre != null ? actividadNombre : "");
+        }
+
+        log.info("[TramiteService] Trámite {} apelado por cliente {} — en revisión", tramiteId, clienteId);
+        return TramiteResponse.fromDocument(tramiteRepository.save(tramite));
+    }
+
+    /**
+     * El funcionario/admin resuelve la apelación: la aprueba (avanza al siguiente nodo BPMN)
+     * o la deniega (cierra el trámite como RECHAZADO).
+     */
+    public TramiteResponse resolverApelacion(String tramiteId, String funcionarioId, ResolverApelacionRequest req) {
+        Tramite tramite = tramiteRepository.findById(tramiteId)
+                .orElseThrow(() -> new ResourceNotFoundException("Trámite no encontrado: " + tramiteId));
+
+        if (tramite.getEstado() != Tramite.EstadoTramite.EN_APELACION) {
+            throw new BadRequestException("El trámite no está en estado EN_APELACION: " + tramite.getEstado());
+        }
+
+        Tramite.Apelacion apelacion = tramite.getApelacion();
+        if (apelacion == null || apelacion.getEstado() != Tramite.EstadoApelacion.EN_REVISION) {
+            throw new BadRequestException("La apelación no está en estado EN_REVISION");
+        }
+
+        User funcionario = userRepository.findById(funcionarioId)
+                .orElseThrow(() -> new ResourceNotFoundException("Funcionario no encontrado: " + funcionarioId));
+        String nombreFuncionario = funcionario.getNombreCompleto() != null
+                ? funcionario.getNombreCompleto() : funcionario.getEmail();
+        String cargoFuncionario = funcionario.getCargo();
+
+        LocalDateTime ahora = LocalDateTime.now();
+        String actividadBpmnId = tramite.getEtapaActual() != null ? tramite.getEtapaActual().getActividadBpmnId() : null;
+        String actividadNombre = tramite.getEtapaActual() != null ? tramite.getEtapaActual().getNombre() : null;
+
+        if (req.isAprobada()) {
+            apelacion.setEstado(Tramite.EstadoApelacion.APROBADO);
+            apelacion.setActiva(false);
+            tramite.setActualizadoEn(ahora);
+            agregarHistorial(tramite, actividadBpmnId, actividadNombre,
+                    funcionarioId, nombreFuncionario, "APELACION_APROBADA", req.getObservaciones(), ahora,
+                    cargoFuncionario, null);
+
+            // Avanza al siguiente nodo BPMN como si fuera una aprobación normal
+            AvanzarTramiteRequest avanzarReq = new AvanzarTramiteRequest();
+            avanzarReq.setAccion(AccionTramite.APROBAR);
+            avanzarReq.setObservaciones(req.getObservaciones());
+            procesarAprobacion(tramite, avanzarReq, funcionarioId, nombreFuncionario,
+                    actividadBpmnId, actividadNombre, ahora);
+        } else {
+            apelacion.setEstado(Tramite.EstadoApelacion.DENEGADO);
+            apelacion.setActiva(false);
+            tramite.setEstado(Tramite.EstadoTramite.RECHAZADO);
+            tramite.setActualizadoEn(ahora);
+            agregarHistorial(tramite, actividadBpmnId, actividadNombre,
+                    funcionarioId, nombreFuncionario, "APELACION_DENEGADA", req.getObservaciones(), ahora,
+                    cargoFuncionario, null);
+        }
+
+        log.info("[TramiteService] Apelación del trámite {} resuelta por {} — aprobada={}",
+                tramiteId, funcionarioId, req.isAprobada());
+        return TramiteResponse.fromDocument(tramiteRepository.save(tramite));
+    }
+
+    /**
+     * Retorna los datos de apelación de un trámite.
+     */
+    public Tramite.Apelacion getApelacion(String tramiteId) {
+        Tramite tramite = tramiteRepository.findById(tramiteId)
+                .orElseThrow(() -> new ResourceNotFoundException("Trámite no encontrado: " + tramiteId));
+        if (tramite.getApelacion() == null) {
+            throw new ResourceNotFoundException("El trámite " + tramiteId + " no tiene apelación registrada");
+        }
+        return tramite.getApelacion();
+    }
+
+    /**
+     * Cierra automáticamente las apelaciones PENDIENTE cuyo plazo haya vencido.
+     * Llamado por ApelacionScheduler cada hora.
+     */
+    public void vencerApelacionesSinRespuesta() {
+        List<Tramite> vencidos = tramiteRepository.findApelacionesVencidas(LocalDateTime.now());
+        if (vencidos.isEmpty()) {
+            log.debug("[ApelacionScheduler] Sin apelaciones vencidas en este ciclo");
+            return;
+        }
+        log.info("[ApelacionScheduler] Procesando {} apelación(es) vencida(s)", vencidos.size());
+        LocalDateTime ahora = LocalDateTime.now();
+        for (Tramite tramite : vencidos) {
+            tramite.getApelacion().setEstado(Tramite.EstadoApelacion.DENEGADO);
+            tramite.getApelacion().setActiva(false);
+            tramite.setEstado(Tramite.EstadoTramite.RECHAZADO);
+            tramite.setActualizadoEn(ahora);
+            String actividadBpmnId = tramite.getEtapaActual() != null ? tramite.getEtapaActual().getActividadBpmnId() : null;
+            String actividadNombre = tramite.getEtapaActual() != null ? tramite.getEtapaActual().getNombre() : null;
+            agregarHistorial(tramite, actividadBpmnId, actividadNombre,
+                    "SISTEMA", "Sistema", "APELACION_VENCIDA",
+                    "Apelación cerrada automáticamente por vencimiento de plazo", ahora);
+        }
+        tramiteRepository.saveAll(vencidos);
+        log.info("[ApelacionScheduler] {} apelación(es) cerrada(s) por vencimiento", vencidos.size());
+    }
+
+    // -----------------------------------------------------------------------
+    // Helper: validación estado no final
+    // -----------------------------------------------------------------------
+
+    private void validarNoEstadoFinal(Tramite tramite) {
+        Tramite.EstadoTramite estado = tramite.getEstado();
+        if (estado == Tramite.EstadoTramite.COMPLETADO
+                || estado == Tramite.EstadoTramite.RECHAZADO
+                || estado == Tramite.EstadoTramite.CANCELADO) {
+            throw new BadRequestException("No se puede operar sobre un trámite en estado final: " + estado);
+        }
     }
 }

@@ -1,5 +1,6 @@
 package com.workflow.tramites;
 
+import com.workflow.files.FileReference;
 import lombok.Builder;
 import lombok.Data;
 
@@ -24,6 +25,20 @@ public class TramiteResponse {
     private LocalDateTime creadoEn;
     private LocalDateTime actualizadoEn;
     private LocalDateTime fechaVencimientoEtapa;
+    private ApelacionDTO apelacion;
+
+    @Data
+    @Builder
+    public static class ApelacionDTO {
+        private boolean activa;
+        private LocalDateTime fechaInicio;
+        private LocalDateTime fechaLimite;
+        private String motivoOriginal;
+        private List<FileReference> documentosOriginales;
+        private List<FileReference> documentosApelatoria;
+        private String justificacionCliente;
+        private String estado;
+    }
 
     @Data
     @Builder
@@ -45,6 +60,8 @@ public class TramiteResponse {
         private String accion;
         private LocalDateTime timestamp;
         private String observaciones;
+        private String responsableCargo;
+        private List<FileReference> documentosAdjuntos;
     }
 
     // -----------------------------------------------------------------------
@@ -67,6 +84,21 @@ public class TramiteResponse {
                 .creadoEn(tramite.getCreadoEn())
                 .actualizadoEn(tramite.getActualizadoEn())
                 .fechaVencimientoEtapa(tramite.getFechaVencimientoEtapa())
+                .apelacion(mapApelacion(tramite.getApelacion()))
+                .build();
+    }
+
+    private static ApelacionDTO mapApelacion(Tramite.Apelacion apelacion) {
+        if (apelacion == null) return null;
+        return ApelacionDTO.builder()
+                .activa(apelacion.isActiva())
+                .fechaInicio(apelacion.getFechaInicio())
+                .fechaLimite(apelacion.getFechaLimite())
+                .motivoOriginal(apelacion.getMotivoOriginal())
+                .documentosOriginales(apelacion.getDocumentosOriginales())
+                .documentosApelatoria(apelacion.getDocumentosApelatoria())
+                .justificacionCliente(apelacion.getJustificacionCliente())
+                .estado(apelacion.getEstado() != null ? apelacion.getEstado().name() : null)
                 .build();
     }
 
@@ -92,6 +124,8 @@ public class TramiteResponse {
                         .accion(h.getAccion())
                         .timestamp(h.getTimestamp())
                         .observaciones(h.getObservaciones())
+                        .responsableCargo(h.getResponsableCargo())
+                        .documentosAdjuntos(h.getDocumentosAdjuntos())
                         .build())
                 .toList();
     }

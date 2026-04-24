@@ -26,6 +26,7 @@ public class ActividadResponse {
     private PosicionResponse posicion;
     private List<TransicionResponse> transiciones;
     private Integer tiempoLimiteHoras;
+    private List<String> accionesPermitidas;
     private LocalDateTime creadoEn;
     private LocalDateTime actualizadoEn;
 

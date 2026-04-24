@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -142,11 +143,46 @@ public class ActividadService {
         return toResponse(updated);
     }
 
-    public void delete(String id) {
+    public ActividadResponse updatePropiedades(String id, ActividadPropiedadesRequest request) {
         Actividad actividad = actividadRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Actividad", id));
 
-        Politica politica = politicaRepository.findById(actividad.getPoliticaId())
+        if (request.getNombre() != null) {
+            actividad.setNombre(request.getNombre());
+        }
+        if (request.getDescripcion() != null) {
+            actividad.setDescripcion(request.getDescripcion());
+        }
+        if (request.getArea() != null) {
+            actividad.setDepartmentId(request.getArea());
+        }
+        if (request.getCargoRequerido() != null) {
+            actividad.setCargoRequerido(request.getCargoRequerido());
+        }
+        if (request.getFormularioId() != null) {
+            actividad.setFormularioId(request.getFormularioId());
+        }
+        if (request.getSlaHoras() != null) {
+            actividad.setTiempoLimiteHoras(request.getSlaHoras());
+        }
+        if (request.getAccionesPermitidas() != null) {
+            actividad.setAccionesPermitidas(request.getAccionesPermitidas());
+        }
+
+        actividad.setActualizadoEn(LocalDateTime.now());
+        Actividad updated = actividadRepository.save(actividad);
+
+        log.info("Propiedades de actividad actualizadas: id={}, politicaId={}, por usuario={}",
+                id, actividad.getPoliticaId(), getCurrentUserId());
+
+        return toResponse(updated);
+    }
+
+    public void delete(String id) {
+        Actividad actividad = actividadRepository.findById(Objects.requireNonNull(id))
+                .orElseThrow(() -> new ResourceNotFoundException("Actividad", id));
+
+        Politica politica = politicaRepository.findById(Objects.requireNonNull(actividad.getPoliticaId()))
                 .orElseThrow(() -> new ResourceNotFoundException("Política", actividad.getPoliticaId()));
 
         verificarPoliticaBorrador(politica);
@@ -168,7 +204,7 @@ public class ActividadService {
         politica.setActualizadoEn(LocalDateTime.now());
         politicaRepository.save(politica);
 
-        actividadRepository.deleteById(id);
+        actividadRepository.deleteById(Objects.requireNonNull(id));
 
         log.info("Actividad eliminada: id={}, politicaId={}, por usuario={}",
                 id, actividad.getPoliticaId(), getCurrentUserId());
@@ -249,6 +285,7 @@ public class ActividadService {
                 .posicion(posicion)
                 .transiciones(transiciones)
                 .tiempoLimiteHoras(a.getTiempoLimiteHoras())
+                .accionesPermitidas(a.getAccionesPermitidas() != null ? a.getAccionesPermitidas() : List.of())
                 .creadoEn(a.getCreadoEn())
                 .actualizadoEn(a.getActualizadoEn())
                 .build();

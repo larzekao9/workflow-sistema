@@ -21,6 +21,12 @@ public class ActividadController {
         return ResponseEntity.ok(actividadService.getByPoliticaId(policyId));
     }
 
+    // GET /activities/by-policy/{policyId}  (alias for the BPMN properties panel)
+    @GetMapping("/activities/by-policy/{policyId}")
+    public ResponseEntity<List<ActividadResponse>> getByPoliticaAlias(@PathVariable String policyId) {
+        return ResponseEntity.ok(actividadService.getByPoliticaId(policyId));
+    }
+
     // GET /activities/{id}
     @GetMapping("/activities/{id}")
     public ResponseEntity<ActividadResponse> getById(@PathVariable String id) {
@@ -41,6 +47,15 @@ public class ActividadController {
             @PathVariable String id,
             @Valid @RequestBody UpdateActividadRequest request) {
         return ResponseEntity.ok(actividadService.update(id, request));
+    }
+
+    // PATCH /activities/{id}/propiedades
+    @PatchMapping("/activities/{id}/propiedades")
+    @PreAuthorize("hasAuthority('GESTIONAR_POLITICAS')")
+    public ResponseEntity<ActividadResponse> updatePropiedades(
+            @PathVariable String id,
+            @RequestBody ActividadPropiedadesRequest request) {
+        return ResponseEntity.ok(actividadService.updatePropiedades(id, request));
     }
 
     // DELETE /activities/{id}

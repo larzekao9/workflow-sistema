@@ -18,6 +18,7 @@ import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -92,6 +93,38 @@ public class FileStorageService {
                 .tamanio(file.getSize())
                 .subidoEn(LocalDateTime.now())
                 .build();
+    }
+
+    /**
+     * Retorna un FileReference con los metadatos del archivo almacenado.
+     * Construye los metadatos desde el nombre del archivo en disco (fileId_nombreOriginal).
+     * Retorna Optional.empty() si el archivo no existe — nunca lanza excepción.
+     */
+    public Optional<FileReference> getFileReference(String fileId) {
+        if (fileId == null || fileId.isBlank()) return Optional.empty();
+        File[] matches = uploadsDir.toFile().listFiles(
+            (dir, name) -> name.startsWith(fileId + "_")
+        );
+        if (matches == null || matches.length == 0) {
+            log.warn("[FileStorageService] getFileReference: archivo no encontrado para fileId={}", fileId);
+            return Optional.empty();
+        }
+        File archivo = matches[0];
+        // Nombre original: todo lo que viene después de "{fileId}_"
+        String nombreOriginal = archivo.getName().substring(fileId.length() + 1);
+        String contentType;
+        try {
+            contentType = Files.probeContentType(archivo.toPath());
+        } catch (IOException e) {
+            contentType = "application/octet-stream";
+        }
+        return Optional.of(FileReference.builder()
+                .fileId(fileId)
+                .nombre(nombreOriginal)
+                .tipo(contentType != null ? contentType : "application/octet-stream")
+                .url("/files/" + fileId)
+                .tamanio(archivo.length())
+                .build());
     }
 
     /**
