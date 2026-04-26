@@ -7,9 +7,9 @@ import {
   Tramite,
   CreateTramiteRequest,
   AvanzarTramiteRequest,
-  FormularioActualResponse,
   TramiteStats,
   Apelacion,
+  FormularioActualResponse,
   RespuestaFormulario
 } from '../models/tramite.model';
 
@@ -51,10 +51,6 @@ export class TramiteService {
 
   responder(id: string, observaciones: string): Observable<Tramite> {
     return this.http.post<Tramite>(`${this.base}/${id}/responder`, { observaciones });
-  }
-
-  getFormularioActual(id: string): Observable<FormularioActualResponse> {
-    return this.http.get<FormularioActualResponse>(`${this.base}/${id}/formulario-actual`);
   }
 
   tomar(id: string): Observable<Tramite> {
@@ -101,8 +97,12 @@ export class TramiteService {
     return this.http.get<Apelacion>(`${this.base}/${id}/apelacion`);
   }
 
-  getRespuestas(tramiteId: string): Observable<RespuestaFormulario[]> {
-    return this.http.get<RespuestaFormulario[]>(`${this.base}/${tramiteId}/respuestas`);
+  getFormularioActual(id: string): Observable<FormularioActualResponse> {
+    return this.http.get<FormularioActualResponse>(`${this.base}/${id}/formulario-actual`);
+  }
+
+  getRespuestas(id: string): Observable<RespuestaFormulario[]> {
+    return this.http.get<RespuestaFormulario[]>(`${this.base}/${id}/respuestas`);
   }
 
   getMisTramites(

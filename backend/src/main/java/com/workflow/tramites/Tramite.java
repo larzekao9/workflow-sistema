@@ -14,6 +14,7 @@ import org.springframework.data.mongodb.core.mapping.Field;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Data
 @Builder
@@ -122,6 +123,9 @@ public class Tramite {
 
         @Field("documentos_adjuntos")
         private List<com.workflow.files.FileReference> documentosAdjuntos;
+
+        @Field("datos")
+        private Map<String, Object> datos;
     }
 
     // -----------------------------------------------------------------------

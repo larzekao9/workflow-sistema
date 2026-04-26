@@ -25,4 +25,6 @@ public class ActividadPropiedadesRequest {
     private Integer slaHoras;
 
     private List<String> accionesPermitidas;
+
+    private List<Actividad.CampoActividad> campos;
 }

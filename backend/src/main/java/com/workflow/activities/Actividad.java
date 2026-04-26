@@ -58,6 +58,18 @@ public class Actividad {
         private String etiqueta;
     }
 
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class CampoActividad {
+        private String nombre;   // key del campo
+        private String label;
+        private String tipo;     // TEXT, NUMBER, DATE, FILE, SELECT, TEXTAREA, BOOLEAN
+        private boolean required;
+        private List<String> opciones; // solo para SELECT
+    }
+
     @Id
     private String id;
 
@@ -102,6 +114,10 @@ public class Actividad {
     @Field("acciones_permitidas")
     @Builder.Default
     private List<String> accionesPermitidas = new ArrayList<>();
+
+    @Field("campos")
+    @Builder.Default
+    private List<CampoActividad> campos = new ArrayList<>();
 
     @Field("creado_en")
     private LocalDateTime creadoEn;

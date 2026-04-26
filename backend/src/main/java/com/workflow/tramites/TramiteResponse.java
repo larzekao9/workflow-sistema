@@ -6,6 +6,7 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Data
 @Builder
@@ -62,6 +63,7 @@ public class TramiteResponse {
         private String observaciones;
         private String responsableCargo;
         private List<FileReference> documentosAdjuntos;
+        private Map<String, Object> datos;
     }
 
     // -----------------------------------------------------------------------
@@ -126,6 +128,7 @@ public class TramiteResponse {
                         .observaciones(h.getObservaciones())
                         .responsableCargo(h.getResponsableCargo())
                         .documentosAdjuntos(h.getDocumentosAdjuntos())
+                        .datos(h.getDatos())
                         .build())
                 .toList();
     }

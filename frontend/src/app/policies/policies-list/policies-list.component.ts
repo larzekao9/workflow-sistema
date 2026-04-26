@@ -112,12 +112,12 @@ import { CreatePoliticaDialogComponent } from '../create-politica-dialog/create-
               <td mat-cell *matCellDef="let p">
                 <button
                   mat-raised-button
-                  color="primary"
-                  *ngIf="p.estado === 'BORRADOR' || p.estado === 'INACTIVA'"
+                  [color]="p.estado === 'ACTIVA' ? 'accent' : 'primary'"
+                  *ngIf="p.estado !== 'ARCHIVADA'"
                   [routerLink]="['/policies', p.id, 'flow']"
-                  matTooltip="Abrir editor de flujo">
-                  <mat-icon>edit_note</mat-icon>
-                  Editar
+                  [matTooltip]="p.estado === 'ACTIVA' ? 'Ver flujo (solo lectura)' : 'Abrir editor de flujo'">
+                  <mat-icon>{{ p.estado === 'ACTIVA' ? 'visibility' : 'edit_note' }}</mat-icon>
+                  {{ p.estado === 'ACTIVA' ? 'Ver flujo' : 'Editar' }}
                 </button>
               </td>
             </ng-container>

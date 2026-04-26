@@ -1,4 +1,18 @@
 export type EstadoTramite = 'INICIADO' | 'EN_PROCESO' | 'COMPLETADO' | 'RECHAZADO' | 'CANCELADO' | 'DEVUELTO' | 'ESCALADO' | 'SIN_ASIGNAR' | 'EN_APELACION';
+
+export interface CampoActividad {
+  nombre: string;
+  label: string;
+  tipo: 'TEXT' | 'NUMBER' | 'DATE' | 'FILE' | 'SELECT' | 'TEXTAREA' | 'BOOLEAN';
+  required: boolean;
+  opciones?: string[];
+}
+
+export interface FormularioActualResponse {
+  actividadId?: string;
+  actividadNombre?: string;
+  campos: CampoActividad[];
+}
 export type AccionTramite = 'APROBAR' | 'RECHAZAR' | 'DEVOLVER' | 'ESCALAR';
 
 export interface EtapaActual {
@@ -39,6 +53,7 @@ export interface HistorialEntry {
   timestamp: string;
   observaciones?: string;
   documentosAdjuntos?: FileRef[];
+  datos?: Record<string, unknown>;
 }
 
 export interface Tramite {
@@ -66,28 +81,7 @@ export interface CreateTramiteRequest {
 export interface AvanzarTramiteRequest {
   accion: AccionTramite;
   observaciones?: string;
-  formularioRespuesta?: Record<string, unknown>;
-  camposFormulario?: Record<string, unknown>;
-  archivosIds?: string[];
-}
-
-export interface RespuestaFormulario {
-  id: string;
-  tramiteId: string;
-  actividadId?: string;
-  actividadNombre: string;
-  usuarioId: string;
-  usuarioNombre: string;
-  rolUsuario: string;
-  campos: Record<string, unknown>;
-  archivos?: FileRef[];
-  accion: string;
-  timestamp: string;
-}
-
-export interface FormularioActualResponse {
-  formularioId?: string;
-  formJsSchema?: object;
+  datos?: Record<string, unknown>;
 }
 
 export interface EstadoConfig {
@@ -109,6 +103,17 @@ export const ESTADO_CONFIG: Record<EstadoTramite, EstadoConfig> = {
 
 export function estadoConfig(estado: EstadoTramite): EstadoConfig {
   return ESTADO_CONFIG[estado] ?? { label: estado, cssClass: 'chip-cancelado' };
+}
+
+export interface RespuestaFormulario {
+  actividadBpmnId?: string;
+  actividadNombre?: string;
+  responsableId?: string;
+  responsableNombre?: string;
+  accion: string;
+  datos: Record<string, unknown>;
+  documentosAdjuntos?: FileRef[];
+  timestamp: string;
 }
 
 export interface TramiteStats {

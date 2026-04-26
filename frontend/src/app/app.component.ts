@@ -276,7 +276,6 @@ export class AppComponent implements OnInit {
     { label: 'Dashboard',   icon: 'dashboard',            route: '/dashboard' },
     { label: 'Monitor',     icon: 'monitor_heart',         route: '/tramites' },
     { label: 'Políticas',   icon: 'account_tree',          route: '/policies' },
-    { label: 'Formularios', icon: 'dynamic_form',          route: '/forms' },
     { label: 'Usuarios',       icon: 'people',                route: '/users' },
     { label: 'Departamentos',  icon: 'corporate_fare',        route: '/departments' },
     { label: 'Roles',          icon: 'admin_panel_settings',  route: '/roles' }
@@ -290,7 +289,7 @@ export class AppComponent implements OnInit {
   private readonly NAV_CLIENTE: NavItem[] = [
     { label: 'Dashboard',    icon: 'dashboard',   route: '/dashboard' },
     { label: 'Nuevo Trámite',icon: 'add_circle',  route: '/tramites/nuevo' },
-    { label: 'Mis Trámites', icon: 'assignment',  route: '/tramites' }
+    { label: 'Mis Trámites', icon: 'assignment',  route: '/mis-tramites' }
   ];
 
   constructor(private router: Router, private authService: AuthService) {}

@@ -33,9 +33,19 @@ public class DepartmentService {
     }
 
     public DepartmentResponse create(DepartmentRequest request) {
-        departmentRepository.findByNombre(request.getNombre()).ifPresent(existing -> {
-            throw new BadRequestException("Ya existe un departamento con el nombre: " + request.getNombre());
-        });
+        String empresaId = request.getEmpresaId() != null
+                ? request.getEmpresaId()
+                : securityUtils.getCurrentUserEmpresaId();
+
+        if (empresaId != null) {
+            departmentRepository.findByNombreAndEmpresaId(request.getNombre(), empresaId).ifPresent(existing -> {
+                throw new BadRequestException("Ya existe un departamento con el nombre: " + request.getNombre());
+            });
+        } else {
+            departmentRepository.findByNombre(request.getNombre()).ifPresent(existing -> {
+                throw new BadRequestException("Ya existe un departamento con el nombre: " + request.getNombre());
+            });
+        }
 
         LocalDateTime ahora = LocalDateTime.now();
         Department dept = Department.builder()
@@ -43,7 +53,7 @@ public class DepartmentService {
                 .descripcion(request.getDescripcion())
                 .responsable(request.getResponsable())
                 .activa(request.getActiva() != null ? request.getActiva() : true)
-                .empresaId(request.getEmpresaId())
+                .empresaId(empresaId)
                 .creadoEn(ahora)
                 .actualizadoEn(ahora)
                 .build();

@@ -4,7 +4,6 @@ import com.workflow.activities.Actividad;
 import com.workflow.activities.ActividadRepository;
 import com.workflow.files.FileReference;
 import com.workflow.files.FileStorageService;
-import com.workflow.forms.FormularioRepository;
 import com.workflow.policies.Politica;
 import com.workflow.policies.PoliticaRepository;
 import com.workflow.roles.Role;
@@ -37,11 +36,9 @@ public class TramiteService {
     private final PoliticaRepository politicaRepository;
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
-    private final FormularioRepository formularioRepository;
     private final BpmnMotorService bpmnMotorService;
     private final ActividadRepository actividadRepository;
     private final FileStorageService fileStorageService;
-    private final RespuestaFormularioRepository respuestaFormularioRepository;
 
     // -----------------------------------------------------------------------
     // Crear trámite
@@ -306,6 +303,9 @@ public class TramiteService {
                 : null;
 
         LocalDateTime ahora = LocalDateTime.now();
+        // Captura el índice donde se insertará el entry de acción (APROBADO/RECHAZADO/etc.)
+        // ANTES del switch, para que datos no queden en el entry ASIGNADO_AUTO posterior
+        int idxAccion = tramite.getHistorial() != null ? tramite.getHistorial().size() : 0;
 
         switch (req.getAccion()) {
             case APROBAR -> procesarAprobacion(tramite, req, responsableId, responsableNombre,
@@ -333,30 +333,13 @@ public class TramiteService {
             }
         }
 
-        tramite.setActualizadoEn(ahora);
-
-        // Persiste datos del formulario si fueron enviados (side-effect opcional)
-        Map<String, Object> camposAvanzar = req.getCamposFormulario();
-        if (camposAvanzar != null && !camposAvanzar.isEmpty()) {
-            List<FileReference> archivosAvanzar = resolveFileReferences(
-                    req.getArchivosIds() != null ? req.getArchivosIds() : List.of());
-            String rolResponsable = resolverRolNombrePorId(responsableId);
-            RespuestaFormulario respuestaAvanzar = RespuestaFormulario.builder()
-                    .tramiteId(tramiteId)
-                    .actividadId(actividadDocId)
-                    .actividadNombre(actividadActualNombre)
-                    .usuarioId(responsableId)
-                    .usuarioNombre(responsableNombre)
-                    .rolUsuario(rolResponsable)
-                    .campos(camposAvanzar)
-                    .archivos(archivosAvanzar)
-                    .accion(req.getAccion().name())
-                    .timestamp(ahora)
-                    .build();
-            respuestaFormularioRepository.save(respuestaAvanzar);
-            log.debug("[TramiteService] RespuestaFormulario guardada para trámite {} (avanzar, accion={})",
-                    tramiteId, req.getAccion());
+        // Guardar datos del formulario en el entry de la acción (no en ASIGNADO_AUTO posterior)
+        if (req.getDatos() != null && !req.getDatos().isEmpty()
+                && tramite.getHistorial() != null && tramite.getHistorial().size() > idxAccion) {
+            tramite.getHistorial().get(idxAccion).setDatos(req.getDatos());
         }
+
+        tramite.setActualizadoEn(ahora);
 
         return TramiteResponse.fromDocument(tramiteRepository.save(tramite));
     }
@@ -415,62 +398,17 @@ public class TramiteService {
                 tramite.getEtapaActual() != null ? tramite.getEtapaActual().getActividadBpmnId() : null,
                 tramite.getEtapaActual() != null ? tramite.getEtapaActual().getNombre() : null,
                 clienteId, clienteNombre, "RESPONDIDO_POR_CLIENTE", observaciones, ahora);
-        tramite.setActualizadoEn(ahora);
 
-        // Persiste datos del formulario si fueron enviados (side-effect opcional)
-        Map<String, Object> campos = req != null ? req.getCamposFormulario() : null;
-        if (campos != null && !campos.isEmpty()) {
-            List<FileReference> archivos = resolveFileReferences(
-                    req.getArchivosIds() != null ? req.getArchivosIds() : List.of());
-            RespuestaFormulario respuesta = RespuestaFormulario.builder()
-                    .tramiteId(tramiteId)
-                    .actividadId(tramite.getEtapaActual() != null ? tramite.getEtapaActual().getActividadId() : null)
-                    .actividadNombre(tramite.getEtapaActual() != null
-                            ? tramite.getEtapaActual().getNombre() : "Sin etapa")
-                    .usuarioId(clienteId)
-                    .usuarioNombre(clienteNombre)
-                    .rolUsuario("CLIENTE")
-                    .campos(campos)
-                    .archivos(archivos)
-                    .accion("RESPONDIDO_POR_CLIENTE")
-                    .timestamp(ahora)
-                    .build();
-            respuestaFormularioRepository.save(respuesta);
-            log.debug("[TramiteService] RespuestaFormulario guardada para trámite {} (responder)", tramiteId);
+        // Guardar datos del formulario en el último historial entry
+        if (req != null && req.getDatos() != null && !req.getDatos().isEmpty()
+                && tramite.getHistorial() != null && !tramite.getHistorial().isEmpty()) {
+            tramite.getHistorial().get(tramite.getHistorial().size() - 1).setDatos(req.getDatos());
         }
+
+        tramite.setActualizadoEn(ahora);
 
         log.info("[TramiteService] Trámite {} respondido por cliente {}", tramiteId, clienteId);
         return TramiteResponse.fromDocument(tramiteRepository.save(tramite));
-    }
-
-    // -----------------------------------------------------------------------
-    // Obtener formulario de la etapa actual
-    // -----------------------------------------------------------------------
-
-    public FormularioActualResponse getFormularioActual(String tramiteId) {
-        Tramite tramite = tramiteRepository.findById(tramiteId)
-                .orElseThrow(() -> new ResourceNotFoundException("Trámite no encontrado: " + tramiteId));
-
-        if (tramite.getEtapaActual() == null || tramite.getEtapaActual().getFormularioId() == null) {
-            return FormularioActualResponse.builder()
-                    .formularioId(null)
-                    .formJsSchema(null)
-                    .build();
-        }
-
-        String formularioId = tramite.getEtapaActual().getFormularioId();
-        return formularioRepository.findById(formularioId)
-                .map(f -> FormularioActualResponse.builder()
-                        .formularioId(formularioId)
-                        .formJsSchema(f.getFormJsSchema()) // Object BSON; null si aún usa secciones custom
-                        .build())
-                .orElseGet(() -> {
-                    log.warn("[TramiteService] Formulario {} no encontrado para trámite {}", formularioId, tramiteId);
-                    return FormularioActualResponse.builder()
-                            .formularioId(formularioId)
-                            .formJsSchema(null)
-                            .build();
-                });
     }
 
     // -----------------------------------------------------------------------
@@ -624,10 +562,12 @@ public class TramiteService {
 
         String departmentId = actividad.getDepartmentId();
 
-        // 2. Si no está configurado departmentId, no asignar (sin error)
+        // 2. Sin departmentId → asignar al cliente que inició el trámite (tarea de recolección de datos)
         if (departmentId == null || departmentId.isBlank()) {
-            log.debug("[AsignacionAuto] Actividad '{}' sin departmentId configurado — sin asignación automática",
-                    bpmnTaskNombre);
+            tramite.setAsignadoAId(tramite.getClienteId());
+            tramite.setEstado(Tramite.EstadoTramite.EN_PROCESO);
+            log.debug("[AsignacionAuto] Actividad '{}' sin dept → asignada al cliente {}",
+                    bpmnTaskNombre, tramite.getClienteId());
             return;
         }
 
@@ -753,35 +693,6 @@ public class TramiteService {
 
         log.info("[TramiteService] Trámite {} asignado manualmente a {} por administrador", tramiteId, funcionarioId);
         return TramiteResponse.fromDocument(tramiteRepository.save(tramite));
-    }
-
-    // -----------------------------------------------------------------------
-    // Sprint 4.1 — Persistencia de respuestas de formulario
-    // -----------------------------------------------------------------------
-
-    /**
-     * Retorna todas las respuestas de formulario asociadas a un trámite, ordenadas cronológicamente.
-     * Retorna DTOs, nunca expone el Document directamente.
-     */
-    public List<RespuestaFormularioResponse> getRespuestas(String tramiteId) {
-        // Verifica que el trámite existe antes de devolver las respuestas
-        if (!tramiteRepository.existsById(tramiteId)) {
-            throw new ResourceNotFoundException("Trámite no encontrado: " + tramiteId);
-        }
-        return respuestaFormularioRepository.findByTramiteIdOrderByTimestampAsc(tramiteId)
-                .stream()
-                .map(RespuestaFormularioResponse::fromDocument)
-                .toList();
-    }
-
-    /**
-     * Resuelve el nombre del rol del usuario a partir de su ID.
-     * Usado al registrar la RespuestaFormulario al avanzar un trámite.
-     */
-    private String resolverRolNombrePorId(String userId) {
-        return userRepository.findById(userId)
-                .map(this::resolverRolNombre)
-                .orElse("DESCONOCIDO");
     }
 
     // -----------------------------------------------------------------------
@@ -1036,6 +947,38 @@ public class TramiteService {
     }
 
     // -----------------------------------------------------------------------
+    // Sprint 4.1 — Formulario actual de la etapa del trámite
+    // -----------------------------------------------------------------------
+
+    /**
+     * Retorna los campos del formulario embebido en la actividad correspondiente
+     * a la etapa actual del trámite. Si la actividad no tiene campos o no se encuentra,
+     * retorna una lista vacía (nunca null).
+     */
+    public FormularioActualResponse getFormularioActual(String tramiteId) {
+        Tramite tramite = tramiteRepository.findById(tramiteId)
+                .orElseThrow(() -> new ResourceNotFoundException("Trámite no encontrado: " + tramiteId));
+
+        if (tramite.getEtapaActual() == null) {
+            return FormularioActualResponse.builder()
+                    .campos(java.util.Collections.emptyList())
+                    .build();
+        }
+
+        String nombre = tramite.getEtapaActual().getNombre();
+        return actividadRepository.findByPoliticaIdAndNombre(tramite.getPoliticaId(), nombre)
+                .map(act -> FormularioActualResponse.builder()
+                        .actividadId(act.getId())
+                        .actividadNombre(act.getNombre())
+                        .campos(act.getCampos() != null ? act.getCampos() : java.util.Collections.emptyList())
+                        .build())
+                .orElseGet(() -> FormularioActualResponse.builder()
+                        .actividadNombre(nombre)
+                        .campos(java.util.Collections.emptyList())
+                        .build());
+    }
+
+    // -----------------------------------------------------------------------
     // Helper: validación estado no final
     // -----------------------------------------------------------------------
 
@@ -1046,5 +989,28 @@ public class TramiteService {
                 || estado == Tramite.EstadoTramite.CANCELADO) {
             throw new BadRequestException("No se puede operar sobre un trámite en estado final: " + estado);
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // GET /tramites/{id}/respuestas — historial de datos de formulario por etapa
+    // -----------------------------------------------------------------------
+
+    public List<RespuestaResponse> getRespuestas(String tramiteId) {
+        Tramite tramite = tramiteRepository.findById(tramiteId)
+                .orElseThrow(() -> new ResourceNotFoundException("Trámite no encontrado: " + tramiteId));
+        if (tramite.getHistorial() == null) return List.of();
+        return tramite.getHistorial().stream()
+                .filter(h -> h.getDatos() != null && !h.getDatos().isEmpty())
+                .map(h -> RespuestaResponse.builder()
+                        .actividadBpmnId(h.getActividadBpmnId())
+                        .actividadNombre(h.getActividadNombre())
+                        .responsableId(h.getResponsableId())
+                        .responsableNombre(h.getResponsableNombre())
+                        .accion(h.getAccion())
+                        .datos(h.getDatos())
+                        .documentosAdjuntos(h.getDocumentosAdjuntos())
+                        .timestamp(h.getTimestamp())
+                        .build())
+                .toList();
     }
 }

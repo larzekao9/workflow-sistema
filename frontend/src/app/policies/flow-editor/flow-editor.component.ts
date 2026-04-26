@@ -18,18 +18,17 @@ import { MatInputModule } from '@angular/material/input';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 
 import { PoliticaService } from '../../shared/services/politica.service';
 import { RoleService } from '../../shared/services/role.service';
-import { FormularioService } from '../../shared/services/formulario.service';
 import { ActividadService } from '../../shared/services/actividad.service';
 import { DepartmentService } from '../../shared/services/department.service';
 import { AiService } from '../../shared/services/ai.service';
 import { AuthService } from '../../shared/services/auth.service';
 import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/confirm-dialog.component';
 import { Politica } from '../../shared/models/politica.model';
-import { Actividad, AccionPermitida } from '../../shared/models/actividad.model';
-import { CampoFormulario, TipoCampo, FormularioResponse, CreateFormularioRequest, UpdateFormularioRequest } from '../../shared/models/formulario.model';
+import { Actividad, AccionPermitida, CampoActividad } from '../../shared/models/actividad.model';
 import { CollaborationService } from '../../shared/services/collaboration.service';
 import { Collaborator } from '../../shared/models/collaborator.model';
 import { BpmnUpdate } from '../../shared/services/collaboration.service';
@@ -54,7 +53,8 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
     CommonModule, RouterModule, FormsModule, ReactiveFormsModule,
     MatButtonModule, MatIconModule, MatTooltipModule, MatSnackBarModule,
     MatProgressSpinnerModule, MatSelectModule, MatFormFieldModule,
-    MatInputModule, MatDividerModule, MatChipsModule, MatDialogModule
+    MatInputModule, MatDividerModule, MatChipsModule, MatDialogModule,
+    MatSlideToggleModule
   ],
   template: `
 <div class="bpmn-shell">
@@ -276,28 +276,6 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
           </button>
         </div>
 
-        <!-- Tabs: Propiedades | Formulario -->
-        <div class="task-props-tabs" role="tablist">
-          <button class="task-props-tab"
-                  [class.active]="propsPanelTab === 'props'"
-                  (click)="switchPropsTab('props')"
-                  role="tab"
-                  [attr.aria-selected]="propsPanelTab === 'props'"
-                  aria-controls="tab-props">
-            <mat-icon style="font-size:16px;width:16px;height:16px">tune</mat-icon>
-            Propiedades
-          </button>
-          <button class="task-props-tab"
-                  [class.active]="propsPanelTab === 'formulario'"
-                  (click)="switchPropsTab('formulario')"
-                  role="tab"
-                  [attr.aria-selected]="propsPanelTab === 'formulario'"
-                  aria-controls="tab-formulario">
-            <mat-icon style="font-size:16px;width:16px;height:16px">assignment</mat-icon>
-            Formulario
-          </button>
-        </div>
-
         <!-- Loading overlay while saving -->
         <div class="task-props-saving" *ngIf="isSavingProps" aria-live="polite" aria-label="Guardando propiedades">
           <mat-spinner diameter="20"></mat-spinner>
@@ -306,7 +284,6 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
 
         <!-- Form body — scrollable -->
         <div class="task-props-body" [formGroup]="propsForm"
-             *ngIf="propsPanelTab === 'props'"
              id="tab-props" role="tabpanel">
 
           <!-- Nombre -->
@@ -367,22 +344,7 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
             </mat-hint>
           </mat-form-field>
 
-          <div class="task-props-section-divider">Formulario y SLA</div>
-
-          <!-- Formulario -->
-          <mat-form-field appearance="outline" class="task-props-field">
-            <mat-label>Formulario asociado</mat-label>
-            <mat-select formControlName="formularioId" aria-label="Formulario asociado">
-              <mat-option value="">Sin formulario</mat-option>
-              <mat-option *ngFor="let f of formulariosList" [value]="f.id">{{ f.nombre }}</mat-option>
-            </mat-select>
-            <mat-progress-spinner *ngIf="isLoadingForms"
-                                  matSuffix
-                                  diameter="16"
-                                  mode="indeterminate"
-                                  style="display:inline-flex;margin-right:8px">
-            </mat-progress-spinner>
-          </mat-form-field>
+          <div class="task-props-section-divider">SLA</div>
 
           <!-- SLA horas -->
           <mat-form-field appearance="outline" class="task-props-field">
@@ -414,92 +376,131 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
             <mat-hint>Selecciona las acciones que puede tomar el responsable</mat-hint>
           </mat-form-field>
 
-        </div><!-- /task-props-body -->
-
-        <!-- Tab Formulario — Sprint 4.3 -->
-        <div class="task-props-body task-props-form-tab"
-             *ngIf="propsPanelTab === 'formulario'"
-             id="tab-formulario" role="tabpanel">
-
-          <div *ngIf="isLoadingFormTab" style="display:flex;justify-content:center;padding:32px">
-            <mat-spinner diameter="32"></mat-spinner>
+          <!-- ── Campos del formulario ── -->
+          <div class="campos-section-header">
+            <span class="task-props-section-divider" style="padding:0">Campos del formulario</span>
+            <span *ngIf="formCampos.length > 0" class="campos-count-badge">{{ formCampos.length }}</span>
           </div>
 
-          <ng-container *ngIf="!isLoadingFormTab">
+          <div class="campos-list">
 
-            <div *ngIf="!propsForm.get('formularioId')?.value && formCampos.length === 0"
-                 class="task-props-form-empty">
-              <mat-icon style="font-size:40px;width:40px;height:40px;color:#bbb">assignment_late</mat-icon>
-              <span>Sin formulario vinculado</span>
-              <button mat-stroked-button (click)="addCampo()">
-                <mat-icon>add</mat-icon> Crear formulario
-              </button>
+            <!-- Empty state -->
+            <div *ngIf="formCampos.length === 0" class="campos-empty">
+              <mat-icon class="campos-empty-icon">dynamic_form</mat-icon>
+              <span>Sin campos definidos</span>
+              <span style="font-size:10px;color:#bbb">Agrega campos para el formulario</span>
             </div>
 
-            <ng-container *ngIf="propsForm.get('formularioId')?.value || formCampos.length > 0">
-              <div class="task-props-section-divider">Campos del formulario</div>
+            <!-- Campo card -->
+            <div *ngFor="let c of formCampos; let i = index" class="campo-card">
 
-              <div *ngFor="let campo of formCampos; let i = index" class="form-campo-row">
-                <input class="form-campo-input"
-                       [(ngModel)]="campo.nombre"
-                       [ngModelOptions]="{standalone: true}"
-                       placeholder="nombre_campo"
-                       [attr.aria-label]="'Nombre del campo ' + (i + 1)" />
-                <input class="form-campo-input"
-                       [(ngModel)]="campo.etiqueta"
-                       [ngModelOptions]="{standalone: true}"
-                       placeholder="Etiqueta"
-                       [attr.aria-label]="'Etiqueta del campo ' + (i + 1)" />
-                <select class="form-campo-select"
-                        [(ngModel)]="campo.tipo"
-                        [ngModelOptions]="{standalone: true}"
-                        [attr.aria-label]="'Tipo del campo ' + (i + 1)">
-                  <option value="TEXT">Texto</option>
-                  <option value="NUMBER">Número</option>
-                  <option value="DATE">Fecha</option>
-                  <option value="FILE">Archivo</option>
-                  <option value="SELECT">Selección</option>
-                  <option value="TEXTAREA">Área de texto</option>
-                  <option value="EMAIL">Email</option>
-                  <option value="BOOLEAN">Sí/No</option>
-                </select>
-                <label class="form-campo-req" [title]="'Obligatorio'">
-                  <input type="checkbox"
-                         [(ngModel)]="campo.obligatorio"
-                         [ngModelOptions]="{standalone: true}"
-                         [attr.aria-label]="'Campo ' + (i + 1) + ' obligatorio'" />
-                  *
-                </label>
+              <!-- Card header -->
+              <div class="campo-card-header">
+                <div class="campo-card-num">{{ i + 1 }}</div>
+                <span class="campo-card-tipo-badge campo-tipo-{{ c.tipo.toLowerCase() }}">
+                  {{ tipoLabel(c.tipo) }}
+                </span>
                 <button mat-icon-button
-                        color="warn"
+                        class="campo-card-delete"
                         (click)="removeCampo(i)"
-                        style="width:28px;height:28px;line-height:28px"
-                        [attr.aria-label]="'Eliminar campo ' + (i + 1)">
-                  <mat-icon style="font-size:16px;width:16px;height:16px">delete</mat-icon>
+                        [attr.aria-label]="'Eliminar campo ' + (c.label || c.nombre)">
+                  <mat-icon>close</mat-icon>
                 </button>
               </div>
 
-              <button mat-stroked-button
-                      style="margin-top:8px;width:100%"
-                      (click)="addCampo()">
-                <mat-icon>add</mat-icon> Agregar campo
-              </button>
-            </ng-container>
+              <!-- Inputs -->
+              <div class="campo-card-body">
+                <mat-form-field appearance="outline" class="campo-field">
+                  <mat-label>Etiqueta visible</mat-label>
+                  <input matInput
+                         [(ngModel)]="c.label"
+                         [ngModelOptions]="{standalone:true}"
+                         placeholder="Ej: Nombre completo"
+                         [attr.aria-label]="'Etiqueta del campo ' + (i+1)" />
+                </mat-form-field>
 
-          </ng-container>
-        </div>
+                <mat-form-field appearance="outline" class="campo-field">
+                  <mat-label>Nombre interno (key)</mat-label>
+                  <input matInput
+                         [(ngModel)]="c.nombre"
+                         [ngModelOptions]="{standalone:true}"
+                         placeholder="Ej: nombre_completo"
+                         [attr.aria-label]="'Nombre key del campo ' + (i+1)" />
+                  <mat-hint>Sin espacios ni caracteres especiales</mat-hint>
+                </mat-form-field>
+
+                <div class="campo-row-tipo-req">
+                  <mat-form-field appearance="outline" class="campo-field-tipo">
+                    <mat-label>Tipo</mat-label>
+                    <mat-select [(ngModel)]="c.tipo" [ngModelOptions]="{standalone:true}"
+                                [attr.aria-label]="'Tipo del campo ' + (i+1)">
+                      <mat-option value="TEXT">
+                        <mat-icon style="font-size:16px;vertical-align:middle;margin-right:4px">short_text</mat-icon>
+                        Texto
+                      </mat-option>
+                      <mat-option value="TEXTAREA">
+                        <mat-icon style="font-size:16px;vertical-align:middle;margin-right:4px">notes</mat-icon>
+                        Área texto
+                      </mat-option>
+                      <mat-option value="NUMBER">
+                        <mat-icon style="font-size:16px;vertical-align:middle;margin-right:4px">tag</mat-icon>
+                        Número
+                      </mat-option>
+                      <mat-option value="DATE">
+                        <mat-icon style="font-size:16px;vertical-align:middle;margin-right:4px">calendar_today</mat-icon>
+                        Fecha
+                      </mat-option>
+                      <mat-option value="FILE">
+                        <mat-icon style="font-size:16px;vertical-align:middle;margin-right:4px">attach_file</mat-icon>
+                        Archivo
+                      </mat-option>
+                      <mat-option value="SELECT">
+                        <mat-icon style="font-size:16px;vertical-align:middle;margin-right:4px">list</mat-icon>
+                        Selección
+                      </mat-option>
+                      <mat-option value="BOOLEAN">
+                        <mat-icon style="font-size:16px;vertical-align:middle;margin-right:4px">toggle_on</mat-icon>
+                        Sí / No
+                      </mat-option>
+                    </mat-select>
+                  </mat-form-field>
+
+                  <div class="campo-req-toggle">
+                    <mat-slide-toggle
+                      color="primary"
+                      [(ngModel)]="c.required"
+                      [ngModelOptions]="{standalone:true}"
+                      [attr.aria-label]="'Campo obligatorio: ' + (c.label || c.nombre)">
+                    </mat-slide-toggle>
+                    <span class="campo-req-label">Obligatorio</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Agregar -->
+            <button mat-stroked-button
+                    class="campo-add-btn"
+                    (click)="addCampo()"
+                    aria-label="Agregar campo al formulario">
+              <mat-icon>add_circle_outline</mat-icon>
+              Agregar campo
+            </button>
+
+          </div>
+
+        </div><!-- /task-props-body -->
 
         <!-- Footer actions -->
         <div class="task-props-footer">
           <button mat-stroked-button
                   (click)="closePropertiesPanel()"
                   class="task-props-cancel-btn"
-                  [disabled]="isSavingProps || isSavingFormTab">
+                  [disabled]="isSavingProps">
             Cancelar
           </button>
           <button mat-raised-button
                   color="primary"
-                  *ngIf="propsPanelTab === 'props'"
                   (click)="saveTaskProperties()"
                   class="task-props-save-btn"
                   [disabled]="isSavingProps || propsForm.invalid"
@@ -507,17 +508,6 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
             <mat-spinner *ngIf="isSavingProps" diameter="16" style="display:inline-flex;margin-right:4px"></mat-spinner>
             <mat-icon *ngIf="!isSavingProps">save</mat-icon>
             Guardar
-          </button>
-          <button mat-raised-button
-                  color="primary"
-                  *ngIf="propsPanelTab === 'formulario'"
-                  (click)="saveFormularioTab()"
-                  class="task-props-save-btn"
-                  [disabled]="isSavingFormTab || formCampos.length === 0"
-                  aria-label="Guardar formulario">
-            <mat-spinner *ngIf="isSavingFormTab" diameter="16" style="display:inline-flex;margin-right:4px"></mat-spinner>
-            <mat-icon *ngIf="!isSavingFormTab">save</mat-icon>
-            Guardar formulario
           </button>
         </div>
 
@@ -643,15 +633,10 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
       background: #f0f4f8;
     }
     .bpmn-properties {
-      width: 300px;
-      min-width: 300px;
-      height: 100%;
-      overflow-y: auto;
-      background: white;
-      border-left: 1px solid #e2e8f0;
+      display: none !important;
     }
     .bpmn-properties--hidden {
-      display: none;
+      display: none !important;
     }
     .bpmn-status-bar {
       display: flex;
@@ -946,11 +931,11 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
       position: absolute;
       right: 0;
       top: 0;
-      width: 320px;
+      width: 360px;
       height: 100%;
-      background: #ffffff;
-      border-left: 1px solid #e2e8f0;
-      box-shadow: -4px 0 24px rgba(0, 0, 0, 0.12);
+      background: #f8faff;
+      border-left: 1px solid #e0e7ff;
+      box-shadow: -6px 0 32px rgba(99,102,241,.13);
       z-index: 100;
       display: flex;
       flex-direction: column;
@@ -961,16 +946,15 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 12px 12px 12px 16px;
-      background: #1e3a8a;
-      border-bottom: 1px solid rgba(255,255,255,0.12);
+      padding: 14px 12px 14px 16px;
+      background: linear-gradient(135deg, #4f46e5 0%, #6366f1 60%, #818cf8 100%);
       flex-shrink: 0;
     }
     .task-props-header > mat-icon {
-      font-size: 18px;
-      width: 18px;
-      height: 18px;
-      color: rgba(255,255,255,0.85);
+      font-size: 20px;
+      width: 20px;
+      height: 20px;
+      color: rgba(255,255,255,0.9);
       flex-shrink: 0;
     }
     .task-props-header-text {
@@ -981,37 +965,45 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
     }
     .task-props-title {
       font-size: 13px;
-      font-weight: 600;
+      font-weight: 700;
       color: white;
       line-height: 1.2;
+      letter-spacing: .01em;
     }
     .task-props-subtitle {
       font-size: 11px;
-      color: rgba(255,255,255,0.65);
+      color: rgba(255,255,255,0.7);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      margin-top: 2px;
+      margin-top: 3px;
+      font-family: monospace;
     }
     .task-props-close {
-      width: 32px !important;
-      height: 32px !important;
-      line-height: 32px !important;
-      color: rgba(255,255,255,0.7) !important;
+      width: 30px !important;
+      height: 30px !important;
+      line-height: 30px !important;
+      color: rgba(255,255,255,0.75) !important;
       flex-shrink: 0;
+      border-radius: 6px !important;
+      background: rgba(255,255,255,0.1) !important;
+      transition: background .15s !important;
     }
-    .task-props-close:hover { color: white !important; }
-    .task-props-close mat-icon { font-size: 18px; width: 18px; height: 18px; }
+    .task-props-close:hover {
+      color: white !important;
+      background: rgba(255,255,255,0.22) !important;
+    }
+    .task-props-close mat-icon { font-size: 16px; width: 16px; height: 16px; }
     /* Saving indicator */
     .task-props-saving {
       display: flex;
       align-items: center;
       gap: 8px;
       padding: 6px 16px;
-      background: #eff6ff;
-      border-bottom: 1px solid #bfdbfe;
+      background: #eef2ff;
+      border-bottom: 1px solid #c7d2fe;
       font-size: 12px;
-      color: #1d4ed8;
+      color: #4338ca;
       flex-shrink: 0;
     }
     /* Scrollable body */
@@ -1031,9 +1023,20 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.8px;
-      color: #94a3b8;
-      padding: 8px 16px 4px;
+      color: #6366f1;
+      padding: 10px 16px 4px;
       margin-top: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .task-props-section-divider::before {
+      content: '';
+      display: inline-block;
+      width: 3px;
+      height: 12px;
+      background: #6366f1;
+      border-radius: 2px;
     }
     /* Form fields */
     .task-props-field {
@@ -1050,21 +1053,24 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
       align-items: center;
       gap: 8px;
       padding: 12px 16px;
-      border-top: 1px solid #e2e8f0;
-      background: #f8fafc;
+      border-top: 1px solid #e0e7ff;
+      background: #fff;
       flex-shrink: 0;
     }
     .task-props-cancel-btn {
       flex: 1;
       font-size: 13px !important;
-      height: 36px !important;
-      color: #64748b !important;
-      border-color: #e2e8f0 !important;
+      height: 38px !important;
+      color: #6b7280 !important;
+      border-color: #d1d5db !important;
+      border-radius: 8px !important;
     }
     .task-props-save-btn {
       flex: 2;
       font-size: 13px !important;
-      height: 36px !important;
+      height: 38px !important;
+      border-radius: 8px !important;
+      background: linear-gradient(135deg, #4f46e5, #6366f1) !important;
     }
     /* ── Tab Formulario — Sprint 4.3 ─────────────────────────── */
     .task-props-tabs {
@@ -1109,54 +1115,169 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
       color: #999;
       text-align: center;
     }
-    .form-campo-row {
+    /* ── Campos del formulario ── */
+    .campos-section-header {
       display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 16px 4px;
+      margin-top: 4px;
+    }
+    .campos-count-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #6366f1;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .campos-list {
+      padding: 4px 12px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .campos-empty {
+      display: flex;
+      flex-direction: column;
       align-items: center;
       gap: 4px;
-      margin-bottom: 6px;
+      padding: 20px 8px;
+      color: #9ca3af;
+      font-size: 11px;
+      text-align: center;
     }
-    .form-campo-input {
-      flex: 1;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      padding: 4px 6px;
-      font-size: 12px;
-      min-width: 0;
-      min-height: 28px;
-      box-sizing: border-box;
+    .campos-empty-icon {
+      font-size: 32px;
+      width: 32px;
+      height: 32px;
+      color: #d1d5db;
     }
-    .form-campo-input:focus {
-      outline: 2px solid #1565c0;
-      border-color: #1565c0;
+    /* Card por campo */
+    .campo-card {
+      border: 1.5px solid #e5e7eb;
+      border-radius: 10px;
+      background: #fff;
+      overflow: hidden;
+      transition: border-color .15s, box-shadow .15s;
     }
-    .form-campo-select {
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      padding: 4px;
-      font-size: 12px;
-      max-width: 90px;
-      min-height: 28px;
-      box-sizing: border-box;
+    .campo-card:hover {
+      border-color: #a5b4fc;
+      box-shadow: 0 2px 8px rgba(99,102,241,.10);
     }
-    .form-campo-select:focus {
-      outline: 2px solid #1565c0;
-      border-color: #1565c0;
-    }
-    .form-campo-req {
+    .campo-card-header {
       display: flex;
       align-items: center;
-      font-size: 16px;
-      color: #e53935;
-      cursor: pointer;
-      user-select: none;
+      gap: 8px;
+      padding: 8px 10px 6px;
+      background: #f8f9ff;
+      border-bottom: 1px solid #f0f0f8;
+    }
+    .campo-card-num {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #6366f1;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       flex-shrink: 0;
     }
-    .form-campo-req input[type=checkbox] { margin-right: 2px; }
+    .campo-card-tipo-badge {
+      flex: 1;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: #ede9fe;
+      color: #6d28d9;
+    }
+    .campo-tipo-file    { background: #ecfdf5; color: #065f46; }
+    .campo-tipo-number  { background: #eff6ff; color: #1e40af; }
+    .campo-tipo-date    { background: #fff7ed; color: #92400e; }
+    .campo-tipo-select  { background: #fdf4ff; color: #7e22ce; }
+    .campo-tipo-boolean { background: #f0fdf4; color: #166534; }
+    .campo-tipo-textarea{ background: #f0f9ff; color: #075985; }
+    .campo-card-delete {
+      width: 24px !important;
+      height: 24px !important;
+      line-height: 24px !important;
+      flex-shrink: 0;
+      color: #9ca3af !important;
+    }
+    .campo-card-delete mat-icon {
+      font-size: 14px !important;
+      width: 14px !important;
+      height: 14px !important;
+    }
+    .campo-card-delete:hover { color: #ef4444 !important; }
+    .campo-card-body {
+      padding: 10px 10px 4px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .campo-field {
+      width: 100%;
+      font-size: 12px;
+    }
+    .campo-field .mat-mdc-form-field-infix { padding: 6px 0 !important; min-height: 32px !important; }
+    .campo-field .mdc-floating-label { font-size: 12px; }
+    .campo-field input.mat-mdc-input-element { font-size: 12px; }
+    .campo-row-tipo-req {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .campo-field-tipo {
+      flex: 1;
+      font-size: 12px;
+    }
+    .campo-field-tipo .mat-mdc-form-field-infix { padding: 6px 0 !important; min-height: 32px !important; }
+    .campo-field-tipo .mdc-floating-label { font-size: 12px; }
+    .campo-req-toggle {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+    .campo-req-label {
+      font-size: 9px;
+      color: #6b7280;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      white-space: nowrap;
+    }
+    .campo-add-btn {
+      width: 100%;
+      font-size: 12px !important;
+      height: 36px !important;
+      border-style: dashed !important;
+      border-color: #a5b4fc !important;
+      color: #6366f1 !important;
+      border-radius: 8px !important;
+      margin-top: 2px;
+    }
+    .campo-add-btn:hover {
+      background: #f5f3ff !important;
+    }
 
     /* Responsive */
     @media (max-width: 768px) {
       .task-props-panel {
-        width: min(320px, 100vw);
+        width: min(360px, 100vw);
       }
     }
   `]
@@ -1196,21 +1317,15 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
   selectedActividad: Actividad | null = null;
   isSavingProps = false;
   isLoadingDepts = false;
-  isLoadingForms = false;
-
-  // --- Tab Formulario — Sprint 4.3 ---
-  propsPanelTab: 'props' | 'formulario' = 'props';
-  formCampos: Array<{ nombre: string; etiqueta: string; tipo: TipoCampo; obligatorio: boolean }> = [];
-  isLoadingFormTab = false;
-  isSavingFormTab = false;
-  private loadedFormularioId: string | null = null;
 
   propsForm!: FormGroup;
   departmentsList: { id: string; nombre: string }[] = [];
   cargosList: string[] = [];
-  formulariosList: { id: string; nombre: string }[] = [];
   /** Actividades cargadas desde el backend para esta política. */
   activitiesList: Actividad[] = [];
+
+  /** Campos del formulario para el builder — Sprint 4.3 */
+  formCampos: Array<{ nombre: string; label: string; tipo: string; required: boolean; opciones: string }> = [];
 
   // AI Chat panel
   showAiPanel = false;
@@ -1231,7 +1346,6 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
     private router: Router,
     private politicaService: PoliticaService,
     private roleService: RoleService,
-    private formularioService: FormularioService,
     private actividadService: ActividadService,
     private departmentService: DepartmentService,
     private aiService: AiService,
@@ -1247,7 +1361,6 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
       descripcion:       [''],
       area:              [''],
       cargoRequerido:    [''],
-      formularioId:      [''],
       slaHoras:          [null],
       accionesPermitidas: [[]]
     });
@@ -1261,7 +1374,6 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
     }
     this.currentUserEmail = this.authService.getCurrentUser()?.email ?? null;
     this.loadData();
-    this.loadFormularios();
     this.loadDepartments();
 
     // Auto-save 2 segundos despues del ultimo cambio
@@ -1772,24 +1884,6 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
 
   // ── UserTask Properties Panel — Sprint 3.5 ────────────────
 
-  private loadFormularios(): void {
-    this.isLoadingForms = true;
-    this.formularioService.getAll({ page: 0, size: 100 }).pipe(
-      takeUntil(this.destroy$)
-    ).subscribe({
-      next: (page) => {
-        this.formulariosList = page.content.map(f => ({ id: f.id, nombre: f.nombre }));
-        this.isLoadingForms = false;
-        this.cdr.detectChanges();
-      },
-      error: (err) => {
-        console.error('Error cargando formularios para el panel:', err);
-        this.isLoadingForms = false;
-        this.cdr.detectChanges();
-      }
-    });
-  }
-
   private loadDepartments(): void {
     this.isLoadingDepts = true;
     this.departmentService.getAll().pipe(
@@ -1837,15 +1931,6 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
     ) ?? null;
     this.selectedActividad = matchedActividad;
 
-    // Extract form reference from BPMN documentation block
-    const docs: Array<Record<string, unknown>> =
-      (el.businessObject?.['documentation'] as Array<Record<string, unknown>>) ?? [];
-    const docText: string = docs.length > 0
-      ? ((docs[0]['text'] ?? docs[0]['$body'] ?? '') as string)
-      : '';
-    const formMatch = docText.match(/FORM:([a-zA-Z0-9]+)/i);
-    const docFormId: string = formMatch ? formMatch[1] : '';
-
     if (matchedActividad) {
       // Use backend data as source of truth
       const areaId = matchedActividad.departmentId ?? '';
@@ -1868,7 +1953,6 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
         descripcion:       matchedActividad.descripcion ?? '',
         area:              resolvedAreaId,
         cargoRequerido:    matchedActividad.cargoRequerido ?? '',
-        formularioId:      matchedActividad.formularioId ?? docFormId,
         slaHoras:          matchedActividad.tiempoLimiteHoras ?? null,
         accionesPermitidas: matchedActividad.accionesPermitidas ?? []
       }, { emitEvent: false });
@@ -1879,6 +1963,16 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
       } else {
         this.cargosList = [];
       }
+
+      // Cargar campos del formulario desde la actividad
+      const campos = matchedActividad.campos ?? [];
+      this.formCampos = campos.map(c => ({
+        nombre: c.nombre,
+        label: c.label,
+        tipo: c.tipo,
+        required: c.required,
+        opciones: (c.opciones ?? []).join(',')
+      }));
     } else {
       // No backend match: prefill from BPMN XML only
       this.propsForm.patchValue({
@@ -1886,10 +1980,11 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
         descripcion:       '',
         area:              '',
         cargoRequerido:    '',
-        formularioId:      docFormId,
         slaHoras:          null,
         accionesPermitidas: []
       }, { emitEvent: false });
+
+      this.formCampos = [];
 
       // Aunque no hay actividad en backend, auto-detectar lane
       const parentElFallback = (el as any).parent;
@@ -1933,48 +2028,16 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
     });
   }
 
-  // ── Tab Formulario — Sprint 4.3 ────────────────────────────
-
-  switchPropsTab(tab: 'props' | 'formulario'): void {
-    this.propsPanelTab = tab;
-    if (tab === 'formulario') {
-      const fId = this.propsForm.get('formularioId')?.value as string;
-      if (fId && fId !== this.loadedFormularioId) {
-        this.loadFormularioTab(fId);
-      } else if (!fId) {
-        this.formCampos = [];
-        this.loadedFormularioId = null;
-      }
-    }
-    this.cdr.detectChanges();
-  }
-
-  private loadFormularioTab(formularioId: string): void {
-    this.isLoadingFormTab = true;
-    this.cdr.detectChanges();
-    this.formularioService.getById(formularioId).pipe(takeUntil(this.destroy$)).subscribe({
-      next: (f) => {
-        this.loadedFormularioId = f.id;
-        const allCampos: CampoFormulario[] = f.secciones?.flatMap(s => s.campos) ?? [];
-        this.formCampos = allCampos.map(c => ({
-          nombre: c.nombre,
-          etiqueta: c.etiqueta,
-          tipo: c.tipo,
-          obligatorio: c.obligatorio
-        }));
-        this.isLoadingFormTab = false;
-        this.cdr.detectChanges();
-      },
-      error: () => {
-        this.isLoadingFormTab = false;
-        this.snackBar.open('Error al cargar el formulario', 'Cerrar', { duration: 3000 });
-        this.cdr.detectChanges();
-      }
-    });
+  tipoLabel(tipo: string): string {
+    const map: Record<string, string> = {
+      TEXT: 'Texto', TEXTAREA: 'Área texto', NUMBER: 'Número',
+      DATE: 'Fecha', FILE: 'Archivo', SELECT: 'Selección', BOOLEAN: 'Sí/No'
+    };
+    return map[tipo] ?? tipo;
   }
 
   addCampo(): void {
-    this.formCampos = [...this.formCampos, { nombre: '', etiqueta: '', tipo: 'TEXT', obligatorio: false }];
+    this.formCampos = [...this.formCampos, { nombre: '', label: '', tipo: 'TEXT', required: false, opciones: '' }];
     this.cdr.detectChanges();
   }
 
@@ -1983,78 +2046,12 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
-  saveFormularioTab(): void {
-    if (this.isSavingFormTab) return;
-    const campos = this.formCampos.filter(c => c.nombre.trim());
-    if (campos.length === 0) {
-      this.snackBar.open('Agregá al menos un campo', 'Cerrar', { duration: 3000 });
-      return;
-    }
-    const seccion = {
-      titulo: 'Principal',
-      orden: 1,
-      campos: campos.map((c, i) => ({
-        id: '',
-        nombre: c.nombre.trim(),
-        etiqueta: c.etiqueta.trim() || c.nombre.trim(),
-        tipo: c.tipo,
-        obligatorio: c.obligatorio,
-        orden: i + 1
-      }))
-    };
-    this.isSavingFormTab = true;
-    this.cdr.detectChanges();
-
-    const existingId = this.propsForm.get('formularioId')?.value as string;
-    const actividadNombre = this.selectedActividad?.nombre || this.selectedElementName || 'Formulario';
-
-    if (existingId) {
-      const req: UpdateFormularioRequest = { secciones: [seccion] };
-      this.formularioService.update(existingId, req).pipe(takeUntil(this.destroy$)).subscribe({
-        next: (f) => this.onFormularioSaved(f),
-        error: () => this.onFormularioSaveError()
-      });
-    } else {
-      const req: CreateFormularioRequest = {
-        nombre: actividadNombre,
-        descripcion: `Formulario del paso ${actividadNombre}`,
-        secciones: [seccion]
-      };
-      this.formularioService.create(req).pipe(takeUntil(this.destroy$)).subscribe({
-        next: (f) => {
-          this.propsForm.patchValue({ formularioId: f.id }, { emitEvent: false });
-          if (this.selectedActividad?.id) {
-            this.actividadService.updatePropiedades(this.selectedActividad.id, { formularioId: f.id })
-              .pipe(takeUntil(this.destroy$)).subscribe();
-          }
-          this.onFormularioSaved(f);
-        },
-        error: () => this.onFormularioSaveError()
-      });
-    }
-  }
-
-  private onFormularioSaved(f: FormularioResponse): void {
-    this.loadedFormularioId = f.id;
-    this.isSavingFormTab = false;
-    this.snackBar.open('Formulario guardado', 'Cerrar', { duration: 2500 });
-    this.cdr.detectChanges();
-  }
-
-  private onFormularioSaveError(): void {
-    this.isSavingFormTab = false;
-    this.snackBar.open('Error al guardar el formulario', 'Cerrar', { duration: 4000 });
-    this.cdr.detectChanges();
-  }
-
   closePropertiesPanel(): void {
     this.selectedElement = null;
     this.selectedActividad = null;
     this.selectedElementName = '';
     this.cargosList = [];
-    this.propsPanelTab = 'props';
     this.formCampos = [];
-    this.loadedFormularioId = null;
     this.cdr.detectChanges();
   }
 
@@ -2067,7 +2064,6 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
       descripcion: string;
       area: string;
       cargoRequerido: string;
-      formularioId: string;
       slaHoras: number | null;
       accionesPermitidas: AccionPermitida[];
     };
@@ -2079,18 +2075,23 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
     const modeling = this.modeler.get('modeling');
     const moddle = this.modeler.get('moddle');
 
-    let docText = '';
-    if (formValue.formularioId) {
-      docText += `FORM:${formValue.formularioId}`;
-    }
-
-    const docElement = moddle.create('bpmn:Documentation', { text: docText });
     modeling.updateProperties(this.selectedElement, {
       name: formValue.nombre,
-      documentation: docText ? [docElement] : []
+      documentation: []
     });
     this.isDirty = true;
     this.autoSave$.next();
+
+    // Preparar campos del formulario para persistir
+    const camposToSave: CampoActividad[] = this.formCampos
+      .filter(c => c.nombre.trim())
+      .map(c => ({
+        nombre: c.nombre.trim(),
+        label: c.label.trim() || c.nombre.trim(),
+        tipo: c.tipo as CampoActividad['tipo'],
+        required: c.required,
+        opciones: c.opciones ? c.opciones.split(',').map(o => o.trim()).filter(Boolean) : undefined
+      }));
 
     // 2. Persist to backend if we have a matching actividad
     if (this.selectedActividad?.id) {
@@ -2099,9 +2100,9 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
         descripcion:       formValue.descripcion || undefined,
         area:              formValue.area || undefined,
         cargoRequerido:    formValue.cargoRequerido || undefined,
-        formularioId:      formValue.formularioId || undefined,
         slaHoras:          formValue.slaHoras ?? undefined,
-        accionesPermitidas: formValue.accionesPermitidas.length > 0 ? formValue.accionesPermitidas : undefined
+        accionesPermitidas: formValue.accionesPermitidas.length > 0 ? formValue.accionesPermitidas : undefined,
+        campos:            camposToSave.length > 0 ? camposToSave : undefined
       }).pipe(takeUntil(this.destroy$)).subscribe({
         next: (updated) => {
           // Update local activities list with new data

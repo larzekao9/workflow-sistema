@@ -1,6 +1,14 @@
 export type TipoActividad = 'INICIO' | 'TAREA' | 'DECISION' | 'FIN';
 export type AccionPermitida = 'APROBAR' | 'RECHAZAR' | 'DEVOLVER' | 'ESCALAR' | 'OBSERVAR' | 'DENEGAR';
 
+export interface CampoActividad {
+  nombre: string;
+  label: string;
+  tipo: 'TEXT' | 'NUMBER' | 'DATE' | 'FILE' | 'SELECT' | 'TEXTAREA' | 'BOOLEAN';
+  required: boolean;
+  opciones?: string[];
+}
+
 export interface Transicion {
   actividadDestinoId: string;
   condicion: string;
@@ -21,6 +29,7 @@ export interface Actividad {
   transiciones: Transicion[];
   tiempoLimiteHoras: number | null;
   accionesPermitidas: AccionPermitida[];
+  campos?: CampoActividad[];
   creadoEn: string;
   actualizadoEn: string;
 }
@@ -34,6 +43,7 @@ export interface ActividadPropiedadesRequest {
   formularioId?: string;
   slaHoras?: number;
   accionesPermitidas?: AccionPermitida[];
+  campos?: CampoActividad[];
 }
 
 export interface CreateActividadRequest {

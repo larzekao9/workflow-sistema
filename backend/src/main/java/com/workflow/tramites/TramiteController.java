@@ -12,7 +12,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
-
 import java.util.List;
 
 @Slf4j
@@ -94,16 +93,6 @@ public class TramiteController {
     }
 
     // -----------------------------------------------------------------------
-    // GET /tramites/{id}/formulario-actual — Formulario de la etapa activa
-    // -----------------------------------------------------------------------
-
-    @GetMapping("/{id}/formulario-actual")
-    public ResponseEntity<FormularioActualResponse> getFormularioActual(@PathVariable String id) {
-        FormularioActualResponse response = tramiteService.getFormularioActual(id);
-        return ResponseEntity.ok(response);
-    }
-
-    // -----------------------------------------------------------------------
     // POST /tramites/{id}/responder — Cliente responde tras estado DEVUELTO
     // -----------------------------------------------------------------------
 
@@ -114,16 +103,6 @@ public class TramiteController {
         String clienteId = resolverUsuarioActualId();
         TramiteResponse response = tramiteService.responderTramite(id, clienteId, request);
         return ResponseEntity.ok(response);
-    }
-
-    // -----------------------------------------------------------------------
-    // GET /tramites/{id}/respuestas — Respuestas de formulario del trámite
-    // -----------------------------------------------------------------------
-
-    @GetMapping("/{id}/respuestas")
-    @PreAuthorize("hasAnyAuthority('FUNCIONARIO','ADMINISTRADOR','SUPERADMIN')")
-    public ResponseEntity<List<RespuestaFormularioResponse>> getRespuestas(@PathVariable String id) {
-        return ResponseEntity.ok(tramiteService.getRespuestas(id));
     }
 
     // -----------------------------------------------------------------------
@@ -223,6 +202,24 @@ public class TramiteController {
     @GetMapping("/{id}/apelacion")
     public ResponseEntity<Tramite.Apelacion> getApelacion(@PathVariable String id) {
         return ResponseEntity.ok(tramiteService.getApelacion(id));
+    }
+
+    // -----------------------------------------------------------------------
+    // GET /tramites/{id}/respuestas — Historial de datos de formulario por etapa
+    // -----------------------------------------------------------------------
+
+    @GetMapping("/{id}/respuestas")
+    public ResponseEntity<List<RespuestaResponse>> getRespuestas(@PathVariable String id) {
+        return ResponseEntity.ok(tramiteService.getRespuestas(id));
+    }
+
+    // -----------------------------------------------------------------------
+    // GET /tramites/{id}/formulario-actual — Campos del formulario de la etapa actual
+    // -----------------------------------------------------------------------
+
+    @GetMapping("/{id}/formulario-actual")
+    public ResponseEntity<FormularioActualResponse> getFormularioActual(@PathVariable String id) {
+        return ResponseEntity.ok(tramiteService.getFormularioActual(id));
     }
 
     // -----------------------------------------------------------------------

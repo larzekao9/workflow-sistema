@@ -2,15 +2,15 @@ import {
   Component,
   OnInit,
   OnDestroy,
-  ElementRef,
-  ViewChild,
   ViewEncapsulation,
   ChangeDetectorRef,
   Inject
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { ReactiveFormsModule, FormBuilder, FormControl, Validators } from '@angular/forms';
+import { FormsModule, ReactiveFormsModule, FormBuilder, FormControl, FormGroup, Validators } from '@angular/forms';
+import { FormlyModule, FormlyFieldConfig } from '@ngx-formly/core';
+import { FormlyMaterialModule } from '@ngx-formly/material';
 import { Subject, takeUntil } from 'rxjs';
 
 import { MatButtonModule } from '@angular/material/button';
@@ -27,8 +27,8 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatCardModule } from '@angular/material/card';
 import { MatListModule } from '@angular/material/list';
 import { MatExpansionModule } from '@angular/material/expansion';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
 
-import { Form } from '@bpmn-io/form-js-viewer';
 import { environment } from '../../../environments/environment';
 
 import { TramiteService } from '../../shared/services/tramite.service';
@@ -40,11 +40,10 @@ import {
   EstadoTramite,
   AccionTramite,
   AvanzarTramiteRequest,
-  FormularioActualResponse,
   EstadoConfig,
   HistorialEntry,
-  RespuestaFormulario,
   FileRef,
+  CampoActividad,
   estadoConfig as getEstadoConfig
 } from '../../shared/models/tramite.model';
 
@@ -243,7 +242,11 @@ export class AsignarFuncionarioDialogComponent {
     MatTooltipModule,
     MatCardModule,
     MatListModule,
-    MatExpansionModule
+    MatExpansionModule,
+    MatProgressBarModule,
+    FormsModule,
+    FormlyModule,
+    FormlyMaterialModule
   ],
   template: `
     <div class="detalle-shell">
@@ -624,66 +627,87 @@ export class AsignarFuncionarioDialogComponent {
 
         </ng-container>
 
-        <!-- ────────── Formulario form-js (todos los roles) ────────── -->
-        <mat-card *ngIf="hasFormulario" class="formulario-card">
-          <mat-card-header>
-            <mat-card-title>
-              <mat-icon aria-hidden="true">dynamic_form</mat-icon>
-              Formulario de la etapa
-            </mat-card-title>
-          </mat-card-header>
-          <mat-card-content>
-            <div *ngIf="isLoadingFormulario" class="formulario-loading" role="status">
-              <mat-spinner diameter="32"></mat-spinner>
+        <!-- ────────── FORMULARIO ETAPA ACTUAL ────────── -->
+        <div *ngIf="puedeAccionar() && (formFields.length > 0 || isLoadingFormulario)" class="formulario-card">
+          <div class="form-card-header">
+            <div class="form-card-header-left">
+              <div class="form-card-icon">
+                <mat-icon aria-hidden="true">assignment</mat-icon>
+              </div>
+              <div>
+                <h2 class="form-card-title">Formulario</h2>
+                <p class="form-card-subtitle">{{ tramite?.etapaActual?.nombre }}</p>
+              </div>
             </div>
-            <div #formjsContainer class="formjs-canvas" [class.hidden]="isLoadingFormulario"></div>
-          </mat-card-content>
-        </mat-card>
+            <span *ngIf="formCamposRequeridos > 0" class="form-required-badge">
+              {{ formCamposRequeridos }} campo{{ formCamposRequeridos !== 1 ? 's' : '' }} obligatorio{{ formCamposRequeridos !== 1 ? 's' : '' }}
+            </span>
+          </div>
+          <div *ngIf="isLoadingFormulario" class="form-loading">
+            <mat-progress-bar mode="indeterminate" color="primary"></mat-progress-bar>
+          </div>
+          <div *ngIf="!isLoadingFormulario && formFields.length > 0" class="form-body">
+            <formly-form
+              [form]="tramiteForm"
+              [fields]="formFields"
+              [(model)]="formModel">
+            </formly-form>
+          </div>
+          <!-- Botón enviar para CLIENTE -->
+          <div *ngIf="esCliente() && !isLoadingFormulario && formFields.length > 0" class="form-actions-cliente">
+            <button
+              mat-raised-button
+              color="primary"
+              [disabled]="isActuando || tramiteForm.invalid"
+              (click)="ejecutarAccionInline('APROBAR')"
+              aria-label="Enviar información del formulario">
+              <mat-icon>send</mat-icon>
+              Enviar información
+              <mat-spinner *ngIf="isActuando" diameter="18" style="display:inline-block;margin-left:8px"></mat-spinner>
+            </button>
+          </div>
+        </div>
 
-        <!-- ────────── Datos de etapas anteriores (todos los roles) ────────── -->
-        <mat-card *ngIf="respuestasFormulario.length > 0" class="respuestas-card">
-          <mat-card-header>
-            <mat-icon mat-card-avatar aria-hidden="true">assignment</mat-icon>
-            <mat-card-title>Datos de etapas anteriores</mat-card-title>
-          </mat-card-header>
-          <mat-card-content>
-            <mat-accordion>
-              <mat-expansion-panel
-                *ngFor="let r of respuestasFormulario"
-                [attr.aria-label]="'Datos de etapa: ' + r.actividadNombre">
-                <mat-expansion-panel-header>
-                  <mat-panel-title>{{ r.actividadNombre }}</mat-panel-title>
-                  <mat-panel-description>
-                    {{ r.usuarioNombre }} &middot; {{ r.timestamp | date:'dd/MM/yyyy HH:mm' }}
-                  </mat-panel-description>
-                </mat-expansion-panel-header>
-                <!-- Campos del formulario -->
-                <div class="campos-grid" *ngIf="(r.campos | keyvalue).length > 0">
-                  <div *ngFor="let campo of r.campos | keyvalue" class="campo-item">
-                    <span class="campo-key">{{ campo.key }}</span>
-                    <span class="campo-val">{{ campo.value }}</span>
+        <!-- ────────── DATOS DE ETAPAS ANTERIORES ────────── -->
+        <div *ngIf="historialConDatos.length > 0" class="respuestas-card">
+          <div class="respuestas-header">
+            <div class="respuestas-header-left">
+              <div class="respuestas-icon">
+                <mat-icon aria-hidden="true">history_edu</mat-icon>
+              </div>
+              <div>
+                <h2 class="respuestas-title">Datos de etapas anteriores</h2>
+                <p class="respuestas-subtitle">{{ historialConDatos.length }} etapa{{ historialConDatos.length !== 1 ? 's' : '' }} con información registrada</p>
+              </div>
+            </div>
+          </div>
+          <mat-accordion class="respuestas-accordion">
+            <mat-expansion-panel *ngFor="let h of historialConDatos; let i = index" class="respuesta-panel">
+              <mat-expansion-panel-header>
+                <mat-panel-title class="respuesta-panel-title">
+                  <div class="respuesta-step-badge">{{ i + 1 }}</div>
+                  {{ h.actividadNombre || 'Etapa' }}
+                </mat-panel-title>
+                <mat-panel-description class="respuesta-panel-desc">
+                  <mat-icon aria-hidden="true" style="font-size:14px;width:14px;height:14px;margin-right:4px">person</mat-icon>
+                  {{ h.responsableNombre }}
+                  <span class="respuesta-date">&nbsp;&middot;&nbsp;{{ h.timestamp | date:'dd/MM HH:mm' }}</span>
+                </mat-panel-description>
+              </mat-expansion-panel-header>
+              <div class="respuesta-body">
+                <div *ngIf="(h.datos | keyvalue)?.length" class="respuesta-campos-grid">
+                  <div *ngFor="let entry of (h.datos | keyvalue)" class="respuesta-campo">
+                    <span class="respuesta-campo-key">{{ entry.key }}</span>
+                    <span class="respuesta-campo-val">{{ entry.value }}</span>
                   </div>
                 </div>
-                <p *ngIf="(r.campos | keyvalue).length === 0" class="campos-vacios">
-                  Sin datos de formulario registrados en esta etapa.
+                <p *ngIf="!(h.datos | keyvalue)?.length" class="respuesta-empty">
+                  Sin datos de formulario en esta etapa.
                 </p>
-                <!-- Archivos adjuntos -->
-                <div *ngIf="r.archivos?.length" class="archivos-adjuntos">
-                  <strong>Archivos adjuntos:</strong>
-                  <a
-                    *ngFor="let f of r.archivos"
-                    [href]="getFileUrl(f.fileId)"
-                    target="_blank"
-                    rel="noopener"
-                    class="archivo-link"
-                    [attr.aria-label]="'Descargar archivo: ' + f.nombre">
-                    <mat-icon aria-hidden="true">attach_file</mat-icon>{{ f.nombre }}
-                  </a>
-                </div>
-              </mat-expansion-panel>
-            </mat-accordion>
-          </mat-card-content>
-        </mat-card>
+              </div>
+            </mat-expansion-panel>
+          </mat-accordion>
+        </div>
 
         <!-- ────────── HISTORIAL (todos los roles) ────────── -->
         <mat-card class="historial-card">
@@ -1030,25 +1054,6 @@ export class AsignarFuncionarioDialogComponent {
     .estado-final-block--cancelado    { background: #fafafa; border-color: #e0e0e0; color: #616161; }
     .estado-final-block--sin_asignar  { background: #fff8e1; border-color: #ffcc02; color: #e65100; }
 
-    /* Formulario */
-    .formulario-card mat-card-title {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 1rem;
-    }
-
-    .formulario-loading {
-      display: flex;
-      justify-content: center;
-      padding: 32px;
-    }
-
-    .formjs-canvas { min-height: 200px; }
-    .formjs-canvas.hidden { display: none; }
-    .formjs-canvas .fjs-container,
-    .formjs-canvas .fjs-form { height: 100% !important; }
-
     /* Historial */
     .historial-card mat-card-title {
       display: flex;
@@ -1181,98 +1186,271 @@ export class AsignarFuncionarioDialogComponent {
       border-radius: 0 4px 4px 0;
     }
 
-    /* Respuestas de etapas anteriores */
-    .respuestas-card mat-card-title {
+    /* ─── Formulario etapa actual ─── */
+    .formulario-card {
+      background: #fff;
+      border-radius: 12px;
+      border: 1.5px solid #6366f1;
+      box-shadow: 0 2px 12px rgba(99,102,241,.10);
+      overflow: hidden;
+    }
+
+    .form-card-header {
       display: flex;
       align-items: center;
-      gap: 8px;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 20px 24px 16px;
+      border-bottom: 1px solid #ede9fe;
+      background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+      flex-wrap: wrap;
+    }
+
+    .form-card-header-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .form-card-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: #6366f1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .form-card-icon mat-icon {
+      color: #fff;
+      font-size: 22px;
+      width: 22px;
+      height: 22px;
+    }
+
+    .form-card-title {
+      margin: 0;
       font-size: 1rem;
+      font-weight: 700;
+      color: #1e1b4b;
+      line-height: 1.2;
     }
 
-    .campos-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 12px;
-      margin-bottom: 12px;
+    .form-card-subtitle {
+      margin: 2px 0 0;
+      font-size: 0.82rem;
+      color: #6366f1;
+      font-weight: 500;
     }
 
-    .campo-item {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    .campo-key {
-      font-size: 0.72rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: #616161;
-    }
-
-    .campo-val {
-      font-size: 0.875rem;
-      color: #212121;
-      word-break: break-word;
-    }
-
-    .campos-vacios {
-      font-size: 0.875rem;
-      color: #9e9e9e;
-      font-style: italic;
-      margin: 0 0 8px;
-    }
-
-    .archivos-adjuntos {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      margin-top: 8px;
-    }
-
-    .archivos-adjuntos strong {
-      font-size: 0.875rem;
-      color: #424242;
-    }
-
-    .archivo-link {
-      display: flex;
+    .form-required-badge {
+      display: inline-flex;
       align-items: center;
       gap: 4px;
-      color: #1565c0;
+      padding: 4px 12px;
+      border-radius: 20px;
+      background: #fef3c7;
+      color: #92400e;
+      font-size: 0.75rem;
+      font-weight: 600;
+      border: 1px solid #fde68a;
+      white-space: nowrap;
+    }
+
+    .form-loading {
+      padding: 0;
+    }
+
+    .form-body {
+      padding: 24px;
+    }
+
+    /* Formly dentro del card formulario */
+    .form-body formly-form {
+      display: block;
+    }
+
+    .form-body formly-field {
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .form-body .mat-mdc-form-field {
+      width: 100%;
+    }
+
+    .form-body formly-field:last-child {
+      margin-bottom: 0;
+    }
+
+    .form-actions-cliente {
+      padding: 16px 24px 20px;
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    /* ─── Datos etapas anteriores ─── */
+    .respuestas-card {
+      background: #fff;
+      border-radius: 12px;
+      border: 1px solid #e5e7eb;
+      box-shadow: 0 1px 6px rgba(0,0,0,.06);
+      overflow: hidden;
+    }
+
+    .respuestas-header {
+      display: flex;
+      align-items: center;
+      padding: 20px 24px 16px;
+      border-bottom: 1px solid #f3f4f6;
+      background: #fafafa;
+    }
+
+    .respuestas-header-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .respuestas-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: #f0fdf4;
+      border: 1.5px solid #bbf7d0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .respuestas-icon mat-icon {
+      color: #16a34a;
+      font-size: 20px;
+      width: 20px;
+      height: 20px;
+    }
+
+    .respuestas-title {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #111827;
+      line-height: 1.2;
+    }
+
+    .respuestas-subtitle {
+      margin: 2px 0 0;
+      font-size: 0.8rem;
+      color: #6b7280;
+    }
+
+    .respuestas-accordion {
+      padding: 12px 16px 16px;
+    }
+
+    .respuesta-panel {
+      border-radius: 8px !important;
+      margin-bottom: 8px !important;
+      border: 1px solid #f3f4f6 !important;
+      box-shadow: none !important;
+    }
+
+    .respuesta-panel-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: #1f2937;
+    }
+
+    .respuesta-step-badge {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #6366f1;
+      color: #fff;
+      font-size: 0.7rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .respuesta-panel-desc {
+      display: flex;
+      align-items: center;
+      font-size: 0.8rem;
+      color: #6b7280;
+    }
+
+    .respuesta-date {
+      color: #9ca3af;
+    }
+
+    .respuesta-body {
+      padding: 8px 0 4px;
+    }
+
+    .respuesta-campos-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+    }
+
+    .respuesta-campo {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      padding: 10px 12px;
+      background: #f9fafb;
+      border-radius: 8px;
+      border: 1px solid #f3f4f6;
+    }
+
+    .respuesta-campo-key {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: #9ca3af;
+    }
+
+    .respuesta-campo-val {
       font-size: 0.875rem;
-      text-decoration: none;
+      color: #111827;
+      word-break: break-word;
+      font-weight: 500;
     }
 
-    .archivo-link:hover,
-    .archivo-link:focus {
-      text-decoration: underline;
-      outline-offset: 2px;
+    .respuesta-empty {
+      font-size: 0.85rem;
+      color: #9ca3af;
+      font-style: italic;
+      padding: 4px 0;
     }
 
-    .archivo-link mat-icon {
-      font-size: 16px;
-      width: 16px;
-      height: 16px;
-    }
   `]
 })
 export class TramiteDetalleComponent implements OnInit, OnDestroy {
-  @ViewChild('formjsContainer') containerRef!: ElementRef<HTMLDivElement>;
-
   tramite: Tramite | null = null;
   isLoading = true;
   isActuando = false;
   isAsignando = false;
-  hasFormulario = false;
+
+  /** Formulario de la etapa actual (ngx-formly) */
+  tramiteForm = new FormGroup({});
+  formFields: FormlyFieldConfig[] = [];
+  formModel: Record<string, unknown> = {};
   isLoadingFormulario = false;
 
   obsInlineControl = new FormControl('');
   apelacionObsControl = new FormControl('');
-  respuestasFormulario: RespuestaFormulario[] = [];
-  private formData: Record<string, unknown> = {};
 
-  private viewer: Form | null = null;
   private readonly destroy$ = new Subject<void>();
 
   constructor(
@@ -1298,7 +1476,6 @@ export class TramiteDetalleComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
-    this.destroyViewer();
   }
 
   estadoConfig(estado: EstadoTramite): EstadoConfig {
@@ -1319,7 +1496,11 @@ export class TramiteDetalleComponent implements OnInit, OnDestroy {
     if (!this.tramite) return false;
     const estado = this.tramite.estado;
     if (estado !== 'INICIADO' && estado !== 'EN_PROCESO' && estado !== 'ESCALADO') return false;
-    return !this.esCliente();
+    if (this.esCliente()) {
+      const currentId = this.authService.getCurrentUser()?.id;
+      return !!currentId && this.tramite.asignadoAId === currentId;
+    }
+    return true;
   }
 
   abrirDialogAsignar(): void {
@@ -1452,6 +1633,15 @@ export class TramiteDetalleComponent implements OnInit, OnDestroy {
     return rechazos.length > 0 ? rechazos[rechazos.length - 1] : null;
   }
 
+  get formCamposRequeridos(): number {
+    return this.formFields.filter(f => f.props?.['required']).length;
+  }
+
+  get historialConDatos(): HistorialEntry[] {
+    if (!this.tramite) return [];
+    return this.tramite.historial.filter(h => h.datos && Object.keys(h.datos).length > 0);
+  }
+
   iconoAccion(accion: string): string {
     const map: Record<string, string> = {
       APROBAR:                  'check_circle',
@@ -1526,7 +1716,7 @@ export class TramiteDetalleComponent implements OnInit, OnDestroy {
     const req: AvanzarTramiteRequest = {
       accion,
       observaciones: obs || undefined,
-      camposFormulario: Object.keys(this.formData).length > 0 ? this.formData : undefined
+      datos: Object.keys(this.formModel).length > 0 ? { ...this.formModel } : undefined
     };
 
     this.tramiteService.avanzar(this.tramite.id, req)
@@ -1535,10 +1725,10 @@ export class TramiteDetalleComponent implements OnInit, OnDestroy {
         next: (updated) => {
           this.tramite = updated;
           this.isActuando = false;
-          this.formData = {};
           this.obsInlineControl.reset();
-          this.destroyViewer();
-          this.hasFormulario = false;
+          this.formFields = [];
+          this.formModel = {};
+          this.tramiteForm = new FormGroup({});
           const labels: Record<AccionTramite, string> = {
             APROBAR:  'Trámite aprobado correctamente',
             RECHAZAR: 'Trámite rechazado',
@@ -1567,15 +1757,11 @@ export class TramiteDetalleComponent implements OnInit, OnDestroy {
         this.tramite = t;
         this.isLoading = false;
         this.cdr.detectChanges();
-
-        if (t.etapaActual?.formularioId && (t.estado === 'INICIADO' || t.estado === 'EN_PROCESO')) {
+        // Cargar formulario si el trámite está en un estado procesable
+        const estadosActivos: EstadoTramite[] = ['INICIADO', 'EN_PROCESO', 'ESCALADO'];
+        if (estadosActivos.includes(t.estado)) {
           this.cargarFormulario(id);
         }
-
-        this.tramiteService.getRespuestas(id).pipe(takeUntil(this.destroy$)).subscribe({
-          next: (r) => { this.respuestasFormulario = r; this.cdr.detectChanges(); },
-          error: () => { /* silent — not critical */ }
-        });
       },
       error: (err: { error?: { message?: string } }) => {
         this.isLoading = false;
@@ -1590,52 +1776,47 @@ export class TramiteDetalleComponent implements OnInit, OnDestroy {
     });
   }
 
-  private cargarFormulario(tramiteId: string): void {
-    this.hasFormulario = true;
-    this.isLoadingFormulario = true;
-    this.tramiteService.getFormularioActual(tramiteId).pipe(takeUntil(this.destroy$)).subscribe({
-      next: (res: FormularioActualResponse) => {
-        this.isLoadingFormulario = false;
-        if (res.formJsSchema) {
-          this.cdr.detectChanges();
-          setTimeout(() => this.initViewer(res.formJsSchema!), 50);
-        } else {
-          this.hasFormulario = false;
-        }
-      },
-      error: (err: unknown) => {
-        this.isLoadingFormulario = false;
-        this.hasFormulario = false;
-        console.error('[TramiteDetalle] Error cargando formulario:', err);
+  private camposToFields(campos: CampoActividad[]): FormlyFieldConfig[] {
+    return campos.map(c => {
+      const base = {
+        key: c.nombre,
+        props: { label: c.label, required: c.required, appearance: 'outline' as const }
+      };
+      switch (c.tipo) {
+        case 'TEXT':     return { ...base, type: 'input',       props: { ...base.props, type: 'text' } };
+        case 'NUMBER':   return { ...base, type: 'input',       props: { ...base.props, type: 'number' } };
+        case 'DATE':     return { ...base, type: 'input',       props: { ...base.props, type: 'date' } };
+        case 'TEXTAREA': return { ...base, type: 'textarea',    props: { ...base.props, rows: 4 } };
+        case 'SELECT':   return { ...base, type: 'select',      props: { ...base.props, options: (c.opciones ?? []).map(o => ({ value: o, label: o })) } };
+        case 'BOOLEAN':  return { ...base, type: 'toggle' };
+        case 'FILE':     return { ...base, type: 'file-upload' };
+        default:         return { ...base, type: 'input' };
       }
     });
   }
 
-  private initViewer(schema: object): void {
-    if (!this.containerRef?.nativeElement) return;
-    this.destroyViewer();
-    this.viewer = new Form({ container: this.containerRef.nativeElement });
-    this.viewer.on('submit', (event: object) => {
-      const e = event as { data?: Record<string, unknown> };
-      this.formData = e.data ?? {};
-    });
-    this.viewer.on('changed', (event: object) => {
-      const e = event as { data?: Record<string, unknown> };
-      this.formData = e.data ?? {};
-    });
-    this.viewer.importSchema(schema).catch((err: unknown) => {
-      console.error('[TramiteDetalle] Error importando schema:', err);
-    });
+  private cargarFormulario(tramiteId: string): void {
+    this.isLoadingFormulario = true;
+    this.tramiteService.getFormularioActual(tramiteId)
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (res) => {
+          this.formFields = this.camposToFields(res.campos ?? []);
+          this.formModel = {};
+          this.tramiteForm = new FormGroup({});
+          this.isLoadingFormulario = false;
+          this.cdr.detectChanges();
+        },
+        error: () => {
+          // El endpoint puede no existir aún o la actividad no tiene formulario — silencioso
+          this.formFields = [];
+          this.isLoadingFormulario = false;
+          this.cdr.detectChanges();
+        }
+      });
   }
 
   getFileUrl(fileId: string): string {
     return `${environment.apiUrl}/files/${fileId}`;
-  }
-
-  private destroyViewer(): void {
-    if (this.viewer) {
-      this.viewer.destroy();
-      this.viewer = null;
-    }
   }
 }

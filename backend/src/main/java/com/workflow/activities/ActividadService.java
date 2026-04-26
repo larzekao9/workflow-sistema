@@ -168,6 +168,9 @@ public class ActividadService {
         if (request.getAccionesPermitidas() != null) {
             actividad.setAccionesPermitidas(request.getAccionesPermitidas());
         }
+        if (request.getCampos() != null) {
+            actividad.setCampos(request.getCampos());
+        }
 
         actividad.setActualizadoEn(LocalDateTime.now());
         Actividad updated = actividadRepository.save(actividad);
@@ -286,6 +289,7 @@ public class ActividadService {
                 .transiciones(transiciones)
                 .tiempoLimiteHoras(a.getTiempoLimiteHoras())
                 .accionesPermitidas(a.getAccionesPermitidas() != null ? a.getAccionesPermitidas() : List.of())
+                .campos(a.getCampos())
                 .creadoEn(a.getCreadoEn())
                 .actualizadoEn(a.getActualizadoEn())
                 .build();

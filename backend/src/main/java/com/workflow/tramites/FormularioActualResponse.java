@@ -1,13 +1,15 @@
 package com.workflow.tramites;
 
+import com.workflow.activities.Actividad;
 import lombok.Builder;
 import lombok.Data;
+
+import java.util.List;
 
 @Data
 @Builder
 public class FormularioActualResponse {
-
-    private String formularioId;
-    // formJsSchema se almacena como Object/BSON en Formulario — puede ser null si no se definió con form-js
-    private Object formJsSchema;
+    private String actividadId;
+    private String actividadNombre;
+    private List<Actividad.CampoActividad> campos;
 }

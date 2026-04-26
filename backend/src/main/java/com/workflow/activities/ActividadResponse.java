@@ -27,6 +27,7 @@ public class ActividadResponse {
     private List<TransicionResponse> transiciones;
     private Integer tiempoLimiteHoras;
     private List<String> accionesPermitidas;
+    private List<Actividad.CampoActividad> campos;
     private LocalDateTime creadoEn;
     private LocalDateTime actualizadoEn;
 

@@ -11,6 +11,8 @@ public interface DepartmentRepository extends MongoRepository<Department, String
 
     Optional<Department> findByNombre(String nombre);
 
+    Optional<Department> findByNombreAndEmpresaId(String nombre, String empresaId);
+
     List<Department> findByActivaTrue();
 
     List<Department> findByEmpresaIdAndActivaTrue(String empresaId);

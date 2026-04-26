@@ -405,24 +405,34 @@ public class PoliticaService {
         Map<String, String> idMap = new HashMap<>();
 
         List<Actividad> copias = actividadesOriginales.stream()
-                .map(original2 -> Actividad.builder()
-                        .politicaId(savedVersion.getId())
-                        .nombre(original2.getNombre())
-                        .descripcion(original2.getDescripcion())
-                        .tipo(original2.getTipo())
-                        .responsableRolId(original2.getResponsableRolId())
-                        .formularioId(original2.getFormularioId())
-                        .posicion(original2.getPosicion() != null
-                                ? Actividad.Posicion.builder()
-                                        .x(original2.getPosicion().getX())
-                                        .y(original2.getPosicion().getY())
-                                        .build()
-                                : new Actividad.Posicion())
-                        .transiciones(new ArrayList<>()) // se reasignan después
-                        .tiempoLimiteHoras(original2.getTiempoLimiteHoras())
-                        .creadoEn(LocalDateTime.now())
-                        .actualizadoEn(LocalDateTime.now())
-                        .build())
+                .map(original2 -> {
+                    Actividad copia = Actividad.builder()
+                            .politicaId(savedVersion.getId())
+                            .nombre(original2.getNombre())
+                            .descripcion(original2.getDescripcion())
+                            .tipo(original2.getTipo())
+                            .responsableRolId(original2.getResponsableRolId())
+                            .formularioId(original2.getFormularioId())
+                            .departmentId(original2.getDepartmentId())
+                            .cargoRequerido(original2.getCargoRequerido())
+                            .posicion(original2.getPosicion() != null
+                                    ? Actividad.Posicion.builder()
+                                            .x(original2.getPosicion().getX())
+                                            .y(original2.getPosicion().getY())
+                                            .build()
+                                    : new Actividad.Posicion())
+                            .transiciones(new ArrayList<>())
+                            .tiempoLimiteHoras(original2.getTiempoLimiteHoras())
+                            .creadoEn(LocalDateTime.now())
+                            .actualizadoEn(LocalDateTime.now())
+                            .build();
+                    // Setters explícitos para campos con @Builder.Default (Lombok no los copia vía builder)
+                    copia.setAccionesPermitidas(original2.getAccionesPermitidas() != null
+                            ? new ArrayList<>(original2.getAccionesPermitidas()) : new ArrayList<>());
+                    copia.setCampos(original2.getCampos() != null
+                            ? new ArrayList<>(original2.getCampos()) : new ArrayList<>());
+                    return copia;
+                })
                 .collect(Collectors.toList());
 
         List<Actividad> savedCopias = actividadRepository.saveAll(copias);
