@@ -34,12 +34,19 @@ public class UserService implements UserDetailsService {
 
         if (user.getRolId() != null) {
             roleRepository.findById(user.getRolId()).ifPresent(role -> {
-                if (role.getPermisos() != null) {
-                    List<org.springframework.security.core.authority.SimpleGrantedAuthority> authorities = role.getPermisos().stream()
-                            .map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)
-                            .toList();
-                    user.setAuthorities(authorities);
+                List<org.springframework.security.core.authority.SimpleGrantedAuthority> authorities =
+                        new java.util.ArrayList<>();
+                // Nombre del rol como authority (para @PreAuthorize hasAnyAuthority)
+                if (role.getNombre() != null) {
+                    authorities.add(new org.springframework.security.core.authority.SimpleGrantedAuthority(role.getNombre()));
                 }
+                // Permisos granulares
+                if (role.getPermisos() != null) {
+                    role.getPermisos().stream()
+                            .map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)
+                            .forEach(authorities::add);
+                }
+                user.setAuthorities(authorities);
             });
         }
 
