@@ -155,6 +155,13 @@ public class UserService implements UserDetailsService {
         });
     }
 
+    public void updateFcmToken(String email, String fcmToken) {
+        userRepository.findByEmail(email).ifPresent(user -> {
+            user.setFcmToken(fcmToken);
+            userRepository.save(user);
+        });
+    }
+
     private UserResponse toResponse(User user) {
         String rolNombre = null;
         if (user.getRolId() != null) {

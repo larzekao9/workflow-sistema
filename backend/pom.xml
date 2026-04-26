@@ -83,6 +83,13 @@
             <version>${mapstruct.version}</version>
         </dependency>
 
+        <!-- Firebase Admin SDK (FCM push notifications) -->
+        <dependency>
+            <groupId>com.google.firebase</groupId>
+            <artifactId>firebase-admin</artifactId>
+            <version>9.4.2</version>
+        </dependency>
+
         <!-- Tests -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

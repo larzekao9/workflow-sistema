@@ -4,6 +4,8 @@ import com.workflow.activities.Actividad;
 import com.workflow.activities.ActividadRepository;
 import com.workflow.files.FileReference;
 import com.workflow.files.FileStorageService;
+import com.workflow.notifications.FcmService;
+import com.workflow.notifications.Notificacion;
 import com.workflow.policies.Politica;
 import com.workflow.policies.PoliticaRepository;
 import com.workflow.roles.Role;
@@ -39,6 +41,7 @@ public class TramiteService {
     private final BpmnMotorService bpmnMotorService;
     private final ActividadRepository actividadRepository;
     private final FileStorageService fileStorageService;
+    private final FcmService fcmService;
 
     // -----------------------------------------------------------------------
     // Crear trámite
@@ -341,6 +344,36 @@ public class TramiteService {
 
         tramite.setActualizadoEn(ahora);
 
+        // FCM hooks — fire-and-forget, no bloquea el flujo de negocio
+        String clienteId = tramite.getClienteId();
+        String politicaNombre = tramite.getPoliticaNombre() != null
+                ? tramite.getPoliticaNombre() : tramite.getPoliticaId();
+        switch (req.getAccion()) {
+            case RECHAZAR -> fcmService.enviarPush(clienteId,
+                    "Trámite rechazado",
+                    "Tu trámite de " + politicaNombre + " ha sido rechazado.",
+                    tramiteId, Notificacion.TipoNotificacion.TRAMITE_RECHAZADO);
+            case DEVOLVER -> fcmService.enviarPush(clienteId,
+                    "Trámite devuelto",
+                    "Tu trámite de " + politicaNombre + " fue devuelto para correcciones.",
+                    tramiteId, Notificacion.TipoNotificacion.TRAMITE_AVANZADO);
+            case APROBAR -> {
+                fcmService.enviarPush(clienteId,
+                        "Trámite avanzado",
+                        "Tu trámite de " + politicaNombre + " ha avanzado a la siguiente etapa.",
+                        tramiteId, Notificacion.TipoNotificacion.TRAMITE_AVANZADO);
+                // Notificar al nuevo funcionario asignado si la asignación automática seleccionó uno
+                String nuevoAsignado = tramite.getAsignadoAId();
+                if (nuevoAsignado != null && !nuevoAsignado.equals(responsableId)) {
+                    fcmService.enviarPush(nuevoAsignado,
+                            "Nueva tarea asignada",
+                            "Se te asignó el trámite de " + politicaNombre + ".",
+                            tramiteId, Notificacion.TipoNotificacion.TAREA_ASIGNADA);
+                }
+            }
+            default -> { /* ESCALAR — sin notificación FCM definida */ }
+        }
+
         return TramiteResponse.fromDocument(tramiteRepository.save(tramite));
     }
 
@@ -406,6 +439,15 @@ public class TramiteService {
         }
 
         tramite.setActualizadoEn(ahora);
+
+        // FCM: notificar al funcionario asignado que el cliente respondió
+        String asignadoId = tramite.getAsignadoAId();
+        if (asignadoId != null) {
+            fcmService.enviarPush(asignadoId,
+                    "Cliente respondió",
+                    "El cliente respondió el trámite de " + tramite.getPoliticaNombre() + ".",
+                    tramiteId, Notificacion.TipoNotificacion.CLIENTE_RESPONDIO);
+        }
 
         log.info("[TramiteService] Trámite {} respondido por cliente {}", tramiteId, clienteId);
         return TramiteResponse.fromDocument(tramiteRepository.save(tramite));
@@ -751,6 +793,12 @@ public class TramiteService {
                 funcionarioId, nombreFuncionario, "OBSERVADO", req.getMotivo(), ahora,
                 cargoFuncionario, docsOriginales.isEmpty() ? null : docsOriginales);
 
+        // FCM: notificar al cliente que su trámite fue observado y puede apelar
+        fcmService.enviarPush(tramite.getClienteId(),
+                "Trámite observado",
+                "Tu trámite de " + tramite.getPoliticaNombre() + " tiene una observación. Podés apelar.",
+                tramiteId, Notificacion.TipoNotificacion.TRAMITE_OBSERVADO);
+
         log.info("[TramiteService] Trámite {} OBSERVADO por funcionario {} — plazo apelación: {}",
                 tramiteId, funcionarioId, apelacion.getFechaLimite());
         return TramiteResponse.fromDocument(tramiteRepository.save(tramite));
@@ -793,6 +841,12 @@ public class TramiteService {
         agregarHistorial(tramite, actividadBpmnId, actividadNombre,
                 funcionarioId, nombreFuncionario, "DENEGADO_APELAR", req.getMotivo(), ahora,
                 cargoFuncionario, docsOriginales.isEmpty() ? null : docsOriginales);
+
+        // FCM: notificar al cliente que su trámite fue denegado y puede apelar
+        fcmService.enviarPush(tramite.getClienteId(),
+                "Trámite denegado",
+                "Tu trámite de " + tramite.getPoliticaNombre() + " fue denegado. Podés apelar.",
+                tramiteId, Notificacion.TipoNotificacion.TRAMITE_OBSERVADO);
 
         log.info("[TramiteService] Trámite {} DENEGADO_APELAR por funcionario {} — plazo: {}",
                 tramiteId, funcionarioId, apelacion.getFechaLimite());
@@ -901,6 +955,14 @@ public class TramiteService {
                     funcionarioId, nombreFuncionario, "APELACION_DENEGADA", req.getObservaciones(), ahora,
                     cargoFuncionario, null);
         }
+
+        // FCM: notificar al cliente el resultado de su apelación
+        fcmService.enviarPush(tramite.getClienteId(),
+                req.isAprobada() ? "Apelación aprobada" : "Apelación denegada",
+                req.isAprobada()
+                        ? "Tu apelación del trámite de " + tramite.getPoliticaNombre() + " fue aprobada."
+                        : "Tu apelación del trámite de " + tramite.getPoliticaNombre() + " fue denegada.",
+                tramiteId, Notificacion.TipoNotificacion.APELACION_RESUELTA);
 
         log.info("[TramiteService] Apelación del trámite {} resuelta por {} — aprobada={}",
                 tramiteId, funcionarioId, req.isAprobada());

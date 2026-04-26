@@ -12,6 +12,7 @@ dist/
 target/
 *.jar
 *.class
+firebase-service-account.json
 
 # Python e IA
 __pycache__/

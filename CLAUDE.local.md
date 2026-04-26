@@ -1,259 +1,351 @@
-# CLAUDE.local.md — workflow-sistema · 2026-04-24
+# CLAUDE.local.md — workflow-sistema · 2026-04-26
 
 ## Stack
 Backend: Java 21 + Spring Boot 3.5 + MongoDB · :8080  
 Frontend: Angular 17 + Material + bpmn-js/dmn-js/form-js · :4200  
+Mobile: Flutter 3 + Dart · `mobile/`  
 Docker Compose local · `docker-compose up -d`
 
 ## Credenciales demo
 `admin@workflow.com / Admin2024!` → ADMINISTRADOR  
-`superadmin@workflow.com / Super2024!` → SUPERADMIN
+`superadmin@workflow.com / Super2024!` → SUPERADMIN  
+`ana.soporte@telecom.bo / Func2024!` → FUNCIONARIO  
+`cliente1@telecom.bo / Cliente2024!` → CLIENTE
 
-## Actores (sin cargos)
-- SUPERADMIN → gestiona empresas + asigna admins
-- ADMINISTRADOR → empresa propia, departamentos, políticas BPMN, formularios
-- FUNCIONARIO → atiende tareas de su área (sin cargo, solo departmentId)
-- CLIENTE → inicia trámites, completa formularios, apela
-
-## Reglas
+## Reglas senior
 - No reconstruir. Solo modificar lo necesario.
 - Backend: DTOs siempre, nunca exponer MongoDB directos.
-- Frontend: URLs solo en environment.ts, auth en sessionStorage.
+- Frontend/Mobile: URLs solo en environment.ts / constants.dart. Auth en sessionStorage (web) / flutter_secure_storage (mobile).
 - Historial append-only. Política con trámites activos = congelada.
 - Prohibido catch vacío.
 
-## Completado
-3.1 Empresas+Superadmin+Files · 3.2 Refactor entidades · 3.3 Asignación auto  
-3.4 Flujo apelación · 3.5 Panel propiedades BPMN · 3.6 Portal cliente
+---
 
-## Sprints pendientes
+## Estado actual — Sprints completados
 
-### Sprint 4.1 · Respuestas formulario persistidas (2d)
-- `RespuestaFormulario` MongoDB: tramiteId, actividadId, usuarioId, campos Map<String,Object>, archivos FileRef[]
-- `POST /tramites/{id}/responder` guarda respuestas + avanza estado
-- `GET /tramites/{id}/respuestas` devuelve historial completo de respuestas
-- tramite-detalle: sección "Datos previos" para que el siguiente actor vea todo
+| Sprint | Feature | Estado |
+|--------|---------|--------|
+| 3.1 | Empresas + SUPERADMIN + File Storage | ✅ |
+| 3.2 | Refactor entidades | ✅ |
+| 3.3 | Asignación automática | ✅ |
+| 3.4 | Flujo apelación | ✅ |
+| 3.5 | Panel propiedades BPMN | ✅ |
+| 3.6 | Portal cliente /mis-tramites | ✅ |
+| 4.1 | Respuestas formulario persistidas + GET /respuestas | ✅ |
+| 4.2 | Swimlanes → auto-mapeo departmentId en flow-editor | ✅ |
+| 4.4 | Seed TelecomBolivia (seed_telecom.py, 549 líneas) | ✅ |
+| 4.5 | Accordion "Datos de etapas anteriores" en tramite-detalle | ✅ |
 
-### Sprint 4.2 · Swimlanes → mapeo de área (1d)
-- flow-editor: onElementChanged → si UserTask dentro de un Lane → auto-set departmentId desde lane name
-- Backend `PATCH /activities/{id}/propiedades` ya existe; solo conectar lane → departmentId
-- Quitar cargos del motor: solo departmentId para asignación
-- Properties panel: campo "Área" se auto-completa desde el lane
+---
 
-### Sprint 4.3 · Form builder inline en editor BPMN (2d)
-- En el sidebar del flow-editor (Sprint 3.5): tab "Formulario" con builder simple
-- Campos: nombre, tipo (text/number/date/file/select/textarea), required
-- Guardar via `POST /forms` → linkear a actividad.formularioId
-- Si ya existe formularioId → cargar y editar (`PUT /forms/{id}`)
+## Sprint 6 — App Móvil Flutter + Notificaciones Push
 
-### Sprint 4.4 · Seed demo TelecomBolivia real (1d)
-- `seed_telecom.py` actualizado: 3 políticas BPMN con BPMN XML real + formularios reales
-- Policy 1: Instalación Internet (Solicitud CC → Verificación → Visita Técnico → Aprobación)
-- Policy 2: Soporte Técnico (Recepción → Diagnóstico → Resolución)
-- Policy 3: Reclamo (Recepción → Investigación → Respuesta con branching)
-- Trámites demo en estados variados (INICIADO, EN_PROCESO, COMPLETADO, EN_APELACION)
+### Arquitectura
 
-### Sprint 4.5 · Continuidad de datos entre actividades (1d)
-- Tramite.respuestasFormularios: List<RespuestaFormularioRef> (embed resumen por actividad)
-- tramite-detalle: accordion "Datos de etapas anteriores" visible para todos los actores
-- Documentos subidos en pasos anteriores: links de descarga accesibles
+```
+mobile/
+  lib/
+    core/
+      constants.dart          ← BASE_URL, timeouts, FCM keys
+      auth/
+        jwt_storage.dart      ← flutter_secure_storage wrapper (key: access_token)
+    data/
+      models/
+        tramite.dart          ← TramiteResponse, EtapaActualDTO, HistorialEntryDTO, ApelacionDTO
+        politica.dart         ← PoliticaResponse (id, nombre, descripcion)
+        campo.dart            ← CampoFormulario (nombre, tipo, label, required, opciones)
+        notificacion.dart     ← Notificacion (id, titulo, cuerpo, leida, tramiteId, timestamp)
+        user.dart             ← UserSession (id, nombreCompleto, rolNombre, token)
+      repositories/
+        tramite_repository.dart
+        auth_repository.dart
+        notificacion_repository.dart
+      services/
+        api_client.dart       ← http base con Bearer JWT auto-inject
+        tramite_service.dart
+        auth_service.dart
+        file_service.dart
+        fcm_service.dart
+    domain/
+      usecases/               ← lógica pura separada de UI
+    presentation/
+      screens/
+        login/
+        cliente/
+          politicas_list/     ← GET /policies/publicas
+          nuevo_tramite/      ← POST /tramites
+          mis_tramites/       ← GET /tramites/mis-tramites
+          tramite_detalle/    ← GET /tramites/{id}
+          tramite_formulario/ ← GET /tramites/{id}/formulario-actual + POST /responder
+          apelacion/          ← POST /tramites/{id}/apelar
+        funcionario/
+          bandeja/            ← GET /tramites (paginado, filtrable)
+          tramite_detalle/    ← GET /tramites/{id} + POST /tomar
+          tramite_accion/     ← POST /tramites/{id}/avanzar | observar
+        shared/
+          notificaciones/     ← historial push recibidas
+      widgets/
+        dynamic_form.dart     ← renderiza campos[] por tipo: TEXT/NUMBER/DATE/FILE/SELECT/TEXTAREA/BOOLEAN
+        estado_chip.dart
+        historial_list.dart
+        file_preview.dart
+      providers/              ← Riverpod providers (AsyncNotifier)
+  main.dart
+  pubspec.yaml
+```
 
- Estado actual del stack — workflow-sistema                                                
-                                                                                            
-  Infraestructura viva                                                                      
-                                                                                            
-  ┌─────────────────────────────────────┬────────┬────────┐                                 
-  │              Servicio               │ Puerto │ Estado │                                 
-  ├─────────────────────────────────────┼────────┼────────┤ 
-  │ Backend (Spring Boot 3.5 / Java 21) │ :8080  │ UP     │
-  ├─────────────────────────────────────┼────────┼────────┤
-  │ Frontend (Angular 17 + Material)    │ :4200  │ UP     │                                 
-  ├─────────────────────────────────────┼────────┼────────┤                                 
-  │ AI Service (FastAPI + Claude)       │ :8001  │ UP     │                                 
-  ├─────────────────────────────────────┼────────┼────────┤                                 
-  │ MongoDB 7.0                         │ :27017 │ UP     │ 
-  └─────────────────────────────────────┴────────┴────────┘                                 
-   
-  ---                                                                                       
-  Modelos MongoDB — qué son y qué hacen                     
-                                                                                            
-  ┌───────────────┬──────┬────────────┬──────────────────────────────────────────────────┐
-  │   Colección   │ Docs │   Modelo   │                    Propósito                     │  
-  ├───────────────┼──────┼────────────┼──────────────────────────────────────────────────┤
-  │ usuarios      │ 7    │ User       │ Identidad: email, password BCrypt, rol,          │  
-  │               │      │            │ departamento, empresaId. Soporta multiempresa.   │
-  ├───────────────┼──────┼────────────┼──────────────────────────────────────────────────┤  
-  │               │      │            │ SUPERADMIN / ADMINISTRADOR / FUNCIONARIO /       │
-  │ roles         │ 4    │ Role       │ CLIENTE con lista de permisos string (ej.        │  
-  │               │      │            │ GESTIONAR_POLITICAS).                            │
-  ├───────────────┼──────┼────────────┼──────────────────────────────────────────────────┤  
-  │ empresas      │ 2    │ Empresa    │ Tenant raíz. Todo lo demás (usuarios, depts,     │  
-  │               │      │            │ políticas) vive bajo empresaId.                  │
-  ├───────────────┼──────┼────────────┼──────────────────────────────────────────────────┤  
-  │ departamentos │ 6    │ Department │ Área funcional dentro de una empresa.            │  
-  │               │      │            │ Actualmente 3 para TelecomBolivia + 3 legacy.    │
-  ├───────────────┼──────┼────────────┼──────────────────────────────────────────────────┤  
-  │               │      │            │ La "plantilla" de workflow. Contiene BPMN XML,   │
-  │ politicas     │ 4    │ Politica   │ estado (BORRADOR/ACTIVA/INACTIVA/ARCHIVADA),     │  
-  │               │      │            │ versión, tags, colaboradores activos WebSocket.  │
-  ├───────────────┼──────┼────────────┼──────────────────────────────────────────────────┤  
-  │               │      │            │ Un nodo UserTask del BPMN. Embebe campos[]       │
-  │ actividades   │ 24   │ Actividad  │ (formulario), departmentId, formularioId legacy. │  
-  │               │      │            │  4 sets de actividades (hay duplicados de seeds  │
-  │               │      │            │ anteriores).                                     │  
-  ├───────────────┼──────┼────────────┼──────────────────────────────────────────────────┤
-  │               │      │            │ Instancia de ejecución de una política. Contiene │
-  │ tramites      │ 3    │ Tramite    │  etapa_actual, historial[] append-only con       │  
-  │               │      │            │ datos: Map<String,Object>, estado completo del   │
-  │               │      │            │ workflow.                                        │  
-  ├───────────────┼──────┼────────────┼──────────────────────────────────────────────────┤
-  │               │      │            │ Colección legacy de form-js. Coexiste con el     │
-  │ formularios   │ 10   │ Formulario │ nuevo sistema de campos[] embebidos en           │  
-  │               │      │            │ actividad.                                       │
-  ├───────────────┼──────┼────────────┼──────────────────────────────────────────────────┤  
-  │ decisiones    │ 0    │ Decision   │ DMN tables para gateways. Editor implementado,   │
-  │               │      │            │ sin datos aún.                                   │  
-  └───────────────┴──────┴────────────┴──────────────────────────────────────────────────┘
-                                                                                            
-  ---                                                       
-  Qué puede hacer cada actor
-                            
-  SUPERADMIN (superadmin@workflow.com / Super2024!)
-                                                                                            
-  - Crear y gestionar empresas
-  - Asignar admins a empresas                                                               
-  - Ver todo cross-empresa                                  
-                                                                                            
-  ADMINISTRADOR (admin@workflow.com / Admin2024!)
-                                                                                            
-  - CRUD usuarios + departamentos de su empresa                                             
-  - CRUD políticas: crear, editar, publicar, versionar, desactivar
-  - Editor BPMN completo (bpmn-js) con panel propiedades por tarea: área, nombre, campos del
-   formulario                                                                               
-  - Editor DMN para gateways de decisión                                                    
-  - Colaboración en tiempo real (WebSocket STOMP) en el editor BPMN                         
-  - Ver todos los trámites de su empresa, stats por estado                                  
-  - Asignación manual de trámites sin asignar                                               
-  - Observar / Denegar trámites con periodo de apelación                                    
-  - Resolver apelaciones                                                                    
-  - Dashboard con métricas                                                                  
-                                                                                            
-  FUNCIONARIO (ana.soporte@telecom.bo / Func2024!, carlos.cc@telecom.bo / Func2024!,        
-  pedro.tecnico@telecom.bo / Func2024!)                                                     
-                                                                                            
-  - Ver trámites asignados a su departamento                                                
-  - "Tomar" un trámite (auto-asignación individual)
-  - Avanzar trámite: APROBAR / RECHAZAR / DEVOLVER / ESCALAR                                
-  - Ver y completar formulario dinámico de la etapa actual (ngx-formly: texto, número,      
-  fecha, textarea, select, boolean toggle, file upload)                                     
-  - Observar / Denegar con apelación                                                        
-  - Dashboard con carga actual                                                              
-                                                            
-  CLIENTE (cliente1@telecom.bo / Cliente2024!, cliente2@telecom.bo / Cliente2024!)          
-                                                            
-  - Ver políticas públicas disponibles (/policies/publicas)                                 
-  - Iniciar nuevo trámite seleccionando una política        
-  - Ver sus trámites en /mis-tramites con contadores de apelación en tiempo real            
-  - Responder cuando el trámite está en DEVUELTO                                            
-  - Presentar apelación (con archivos) cuando está OBSERVADO o DENEGADO                     
-  - Portal /mis-tramites separado del panel admin                                           
-                                                                                            
-  ---                                                       
-  Motor de workflows — qué está funcionando                                                 
-                                                                                            
-  ┌────────────────────────────────────────────────────────────────────────┬──────────┐
-  │                                Feature                                 │  Estado  │     
-  ├────────────────────────────────────────────────────────────────────────┼──────────┤
-  │ BPMN parsing (userTask, gateway, start/end events)                     │ ✅       │
-  ├────────────────────────────────────────────────────────────────────────┼──────────┤
-  │ Asignación automática por departamento (menor carga)                   │ ✅       │     
-  ├────────────────────────────────────────────────────────────────────────┼──────────┤     
-  │ Asignación manual por admin                                            │ ✅       │     
-  ├────────────────────────────────────────────────────────────────────────┼──────────┤     
-  │ Estado SIN_ASIGNAR cuando no hay funcionario disponible                │ ✅       │
-  ├────────────────────────────────────────────────────────────────────────┼──────────┤     
-  │ Avance de etapas siguiendo flujo BPMN                                  │ ✅       │
-  ├────────────────────────────────────────────────────────────────────────┼──────────┤     
-  │ Historial append-only por trámite                                      │ ✅       │
-  ├────────────────────────────────────────────────────────────────────────┼──────────┤     
-  │ Formulario dinámico por etapa (GET /tramites/{id}/formulario-actual)   │ ✅       │
-  ├────────────────────────────────────────────────────────────────────────┼──────────┤     
-  │ Datos del formulario guardados en historial (datos: Map)               │ ✅       │
-  ├────────────────────────────────────────────────────────────────────────┼──────────┤     
-  │ Flujo apelación completo: OBSERVAR/DENEGAR → EN_APELACION → resolver   │ ✅       │
-  ├────────────────────────────────────────────────────────────────────────┼──────────┤     
-  │ Scheduler @hourly vence apelaciones sin respuesta (48h)                │ ✅       │
-  ├────────────────────────────────────────────────────────────────────────┼──────────┤     
-  │ Upload de archivos (local FS, MIME validation, UUID naming)            │ ✅       │
-  ├────────────────────────────────────────────────────────────────────────┼──────────┤     
-  │ WebSocket colaboración BPMN editor                                     │ ✅       │
-  ├────────────────────────────────────────────────────────────────────────┼──────────┤     
-  │ AI panel en editor BPMN (FastAPI + Claude)                             │ ✅       │
-  ├────────────────────────────────────────────────────────────────────────┼──────────┤     
-  │ Formularios ngx-formly (TEXT/NUMBER/DATE/TEXTAREA/SELECT/BOOLEAN/FILE) │ ✅ nuevo │
-  └────────────────────────────────────────────────────────────────────────┴──────────┘     
-                                                            
-  ---                                                                                       
-  Lo que falta para producción real                         
-                                                                                            
-  Crítico antes de demo:
-                                                                                            
-  1. Duplicados de actividades — hay 4 sets de actividades para la misma política (seeds    
-  anteriores no limpiaron). El motor funciona porque usa el politicaId activo, pero genera  
-  ruido. Solución: db.actividades.deleteMany({campos: {$exists: false}}) más un re-seed     
-  limpio.                                                   
-  2. Sprint 4.1 incompleto — POST /tramites/{id}/responder guarda datos en historial pero no
-   existe la colección respuestas_formulario ni GET /tramites/{id}/respuestas. El siguiente 
-  actor no ve datos del anterior en la UI todavía.
-  3. formularios legacy (10 docs) — coexiste con el nuevo sistema campos[] en Actividad. No 
-  rompe nada pero es deuda técnica.                                                         
-   
-  No bloquea demo pero importante:                                                          
-  - Sin HTTPS / reverse proxy (nginx bare HTTP en :4200/:8080)
-  - Sin rate limiting en endpoints                                                          
-  - Archivos en filesystem local del container (se pierden si se recrea el container, aunque
-   hay volumen montado)                                                                     
-  - Cero tests automatizados                                                                
-                            
-  Para producción real de workflows (producción de negocio):                                
-  - Sprint 4.1 (respuestas visibles entre actores) es el único bloqueante funcional real    
-  - Todo lo demás está suficientemente completo para demos y MVPs                        
+### Dependencias pubspec.yaml
+```yaml
+dependencies:
+  http: ^1.2.0
+  go_router: ^13.0.0
+  flutter_riverpod: ^2.5.0
+  flutter_secure_storage: ^9.0.0
+  firebase_core: ^3.0.0
+  firebase_messaging: ^15.0.0
+  image_picker: ^1.0.0
+  file_picker: ^8.0.0
+  cached_network_image: ^3.3.0
+  intl: ^0.19.0
+```
 
+---
 
-  El fix funciona: APROBADO | Verificación Técnica | [factibilidad, distancia_nodo, ...] —
-  datos correctamente en la acción del funcionario, no en ASIGNADO_AUTO.                    
-                                                                                          
-  ---                                                                                       
-  Sprint 4.1 completado                                                                     
-                                                                                            
-  5 archivos modificados, 1 nuevo:                                                          
-                                                                                            
-  ┌──────────────────────────┬──────────────────────────────────────────────────────────┐
-  │         Archivo          │                          Cambio                          │   
-  ├──────────────────────────┼──────────────────────────────────────────────────────────┤
-  │ RespuestaResponse.java   │ DTO de respuesta: actividadNombre, accion, datos,        │
-  │ (nuevo)                  │ timestamp                                                │
-  ├──────────────────────────┼──────────────────────────────────────────────────────────┤   
-  │ TramiteService.java      │ + getRespuestas(): filtra historial donde datos != null  │
-  ├──────────────────────────┼──────────────────────────────────────────────────────────┤   
-  │                          │ Bug fix: datos se guardan en el entry APROBADO (índice   │
-  │ TramiteService.java      │ capturado antes del switch), no en el ASIGNADO_AUTO que  │   
-  │                          │ puede venir después                                      │   
-  ├──────────────────────────┼──────────────────────────────────────────────────────────┤
-  │ TramiteController.java   │ + GET /tramites/{id}/respuestas                          │   
-  ├──────────────────────────┼──────────────────────────────────────────────────────────┤   
-  │ tramite.model.ts         │ + interface RespuestaFormulario                          │
-  ├──────────────────────────┼──────────────────────────────────────────────────────────┤   
-  │ tramite.service.ts       │ + getRespuestas(id)                                      │
-  └──────────────────────────┴──────────────────────────────────────────────────────────┘   
-   
-  Lo que ya estaba funcionando (no se tocó):                                                
-  - historialConDatos getter en tramite-detalle filtra el historial del tramite en memoria
-  - Template "Datos de etapas anteriores" con accordion ya existía y ya renderiza           
-                                                            
-  Flujo end-to-end verificado:                                                              
-  1. Funcionario aprueba etapa + submit formly → datos: {factibilidad, distancia_nodo, ...}
-  en body                                                                                   
-  2. Backend guarda datos en el entry APROBADO del historial
-  3. Frontend muestra los datos en "Datos de etapas anteriores" para el siguiente actor     
-  4. GET /tramites/{id}/respuestas disponible para cualquier consumidor externo  
+### Endpoints reutilizados del backend (sin cambios)
+
+| Método | Endpoint | Actor | Uso |
+|--------|----------|-------|-----|
+| POST | /auth/login | todos | JWT + rol |
+| GET | /policies/publicas | CLIENTE | lista para nuevo trámite |
+| POST | /tramites | CLIENTE | iniciar trámite |
+| GET | /tramites/mis-tramites | CLIENTE | bandeja cliente |
+| GET | /tramites | FUNCIONARIO | bandeja funcionario |
+| GET | /tramites/{id} | todos | detalle completo |
+| GET | /tramites/{id}/formulario-actual | todos | campos dinámicos por etapa |
+| POST | /tramites/{id}/avanzar | FUNCIONARIO | APROBAR/RECHAZAR/DEVOLVER/ESCALAR |
+| POST | /tramites/{id}/responder | CLIENTE | corregir DEVUELTO |
+| POST | /tramites/{id}/observar | FUNCIONARIO | observar con comentario |
+| POST | /tramites/{id}/tomar | FUNCIONARIO | auto-asignarse |
+| POST | /tramites/{id}/apelar | CLIENTE | apelar OBSERVADO/DENEGADO |
+| GET | /tramites/{id}/respuestas | todos | historial formularios anteriores |
+| POST | /files/upload | todos | multipart/form-data |
+| GET | /files/{fileId} | todos | download con JWT |
+
+### Endpoints NUEVOS a agregar en backend (solo para FCM)
+
+| Método | Endpoint | Body | Propósito |
+|--------|----------|------|-----------|
+| PATCH | /users/me/fcm-token | `{ fcmToken: string }` | registrar device token al login |
+| GET | /notificaciones | — | historial notificaciones del usuario |
+| PATCH | /notificaciones/{id}/leer | — | marcar como leída |
+
+---
+
+### Cambios de backend para FCM
+
+**1. User entity** — agregar campo:
+```java
+@Field("fcm_token")
+private String fcmToken;
+```
+
+**2. Nuevo endpoint** `PATCH /users/me/fcm-token`:
+```java
+@PatchMapping("/me/fcm-token")
+public ResponseEntity<Void> updateFcmToken(@RequestBody FcmTokenRequest req, Principal principal) {
+    userService.updateFcmToken(principal.getName(), req.getFcmToken());
+    return ResponseEntity.ok().build();
+}
+```
+
+**3. Colección `notificaciones`** MongoDB:
+```
+{ userId, titulo, cuerpo, tramiteId, tipo, leida: false, creadoEn }
+tipos: TRAMITE_AVANZADO | TRAMITE_OBSERVADO | TRAMITE_RECHAZADO |
+       TAREA_ASIGNADA | CLIENTE_RESPONDIO | APELACION_RESUELTA
+```
+
+**4. `FcmService`** — integra Firebase Admin SDK:
+```java
+// firebase-admin dependency en pom.xml
+// FcmService.enviarPush(userId, titulo, cuerpo, tramiteId)
+//   → busca user.fcmToken → llama FCM API → guarda Notificacion en MongoDB
+```
+
+**5. Hooks en TramiteService** — dónde disparar push:
+
+| Evento | Receptor | Tipo |
+|--------|----------|------|
+| avanzarTramite (ASIGNADO_AUTO / SIN_ASIGNAR) | funcionario asignado | TAREA_ASIGNADA |
+| avanzarTramite (cualquier avance) | cliente | TRAMITE_AVANZADO |
+| avanzarTramite acción RECHAZAR | cliente | TRAMITE_RECHAZADO |
+| observar / denegar | cliente | TRAMITE_OBSERVADO |
+| responder (cliente corrige DEVUELTO) | funcionario asignado | CLIENTE_RESPONDIO |
+| resolverApelacion | cliente | APELACION_RESUELTA |
+
+---
+
+### Formulario dinámico (DynamicFormWidget)
+
+Los campos vienen de `GET /tramites/{id}/formulario-actual`:
+```json
+{ "actividadId": "...", "actividadNombre": "...",
+  "campos": [{ "nombre": "dni", "tipo": "NUMBER", "label": "Cédula de identidad", "required": true }] }
+```
+
+Tipos → widget Flutter:
+| Tipo backend | Widget Flutter |
+|---|---|
+| TEXT | TextFormField |
+| NUMBER | TextFormField(keyboardType: numeric) |
+| DATE | TextFormField + DatePicker |
+| TEXTAREA | TextFormField(maxLines: 5) |
+| SELECT | DropdownButtonFormField(items: campo.opciones) |
+| BOOLEAN | SwitchListTile |
+| FILE | ElevatedButton → file_picker → POST /files/upload → guarda fileId |
+
+Submit → `POST /tramites/{id}/avanzar`:
+```json
+{ "accion": "APROBAR", "datos": { "dni": "12345", "fotoCarnet": "fileId-uuid" } }
+```
+
+---
+
+### Plan de Sprints Mobile — Optimizado (7 días total)
+
+**Principio**: cliente y funcionario comparten 80% de UI. `TramiteDetalleScreen` es único, con acciones condicionales por rol. `DynamicFormWidget` incluye FILE desde el día 1. Sin capa domain/usecases — providers llaman directo a repositories.
+
+---
+
+#### Sprint M1 — Base + Auth (1.5d)
+
+Archivos a crear:
+```
+pubspec.yaml                        ← todas las deps de una vez
+lib/core/constants.dart             ← BASE_URL = http://localhost:8080
+lib/core/auth/jwt_storage.dart      ← flutter_secure_storage (access_token, current_user)
+lib/data/services/api_client.dart   ← http wrapper que auto-inyecta Bearer JWT
+lib/data/models/user.dart           ← UserSession {id, nombreCompleto, rolNombre, token}
+lib/presentation/screens/login/login_screen.dart
+main.dart                           ← go_router con redirect por rol
+```
+
+go_router rutas:
+```
+/login
+/cliente/tramites          ← MisTramitesScreen
+/cliente/tramites/nuevo    ← PoliticasListScreen → NuevoTramite
+/cliente/tramites/:id      ← TramiteDetalleScreen (rol=CLIENTE)
+/funcionario/bandeja       ← BandejaScreen
+/funcionario/tramites/:id  ← TramiteDetalleScreen (rol=FUNCIONARIO)
+```
+
+---
+
+#### Sprint M2 — Flujos completos: Cliente + Funcionario + Formularios + Archivos (4d)
+
+Un solo sprint porque todo comparte los mismos widgets base.
+
+**Widgets compartidos (construir primero, día 1):**
+```
+EstadoChip          ← color por estado (INICIADO/EN_PROCESO/COMPLETADO/etc.)
+HistorialList       ← lista de HistorialEntryDTO con accion + timestamp + observaciones
+DynamicFormWidget   ← renderiza campos[] completo:
+  TEXT     → TextFormField
+  NUMBER   → TextFormField(keyboardType: numeric)
+  DATE     → TextFormField + showDatePicker
+  TEXTAREA → TextFormField(maxLines: 5)
+  SELECT   → DropdownButtonFormField(items: campo.opciones)
+  BOOLEAN  → SwitchListTile
+  FILE     → ElevatedButton → file_picker → POST /files/upload → guarda fileId en datos{}
+```
+
+**TramiteDetalleScreen (shared, día 2) — una pantalla, dos modos:**
+```
+GET /tramites/{id} → muestra: estado chip, etapaActual, historial, datos etapas anteriores
+
+Si rol == CLIENTE && estado == DEVUELTO:
+  → muestra DynamicFormWidget + botón "Enviar corrección" → POST /tramites/{id}/responder
+
+Si rol == CLIENTE && apelacion.estado == PENDIENTE:
+  → banner "Podés apelar" + botón → ApelarBottomSheet → POST /tramites/{id}/apelar
+
+Si rol == FUNCIONARIO && tramite.asignadoAId == currentUser.id:
+  → DynamicFormWidget + AccionesWidget (APROBAR/RECHAZAR/DEVOLVER/OBSERVAR)
+  → APROBAR/RECHAZAR/DEVOLVER → POST /tramites/{id}/avanzar {accion, datos, observaciones}
+  → OBSERVAR → POST /tramites/{id}/observar {motivo, observaciones}
+
+Si rol == FUNCIONARIO && tramite.asignadoAId == null:
+  → botón "Tomar tarea" → POST /tramites/{id}/tomar
+```
+
+**Pantallas Cliente (día 3):**
+```
+MisTramitesScreen   → GET /tramites/mis-tramites → lista + EstadoChip → navega a detalle
+PoliticasListScreen → GET /policies/publicas → tarjetas → tap → POST /tramites → detalle
+```
+
+**Pantallas Funcionario (día 4):**
+```
+BandejaScreen → GET /tramites?page=0&size=20
+  Filtros: chips de estado (INICIADO/EN_PROCESO/SIN_ASIGNAR/DEVUELTO)
+  Cada item → navega a TramiteDetalleScreen (rol=FUNCIONARIO)
+```
+
+---
+
+#### Sprint M3 — FCM Push (1.5d)
+
+**Backend primero (medio día):**
+
+1. `User.java` — agregar campo `fcmToken`
+2. `UserController` — `PATCH /users/me/fcm-token` body: `{fcmToken}`
+3. `pom.xml` — agregar `firebase-admin`
+4. `FcmService.java` — `enviarPush(userId, titulo, cuerpo, tramiteId)`
+5. `TramiteService.java` — agregar calls a FcmService en:
+   - `avanzarTramite` → cliente (TRAMITE_AVANZADO) + funcionario nuevo asignado (TAREA_ASIGNADA)
+   - `observar` / `denegar` → cliente (TRAMITE_OBSERVADO)
+   - `responder` → funcionario (CLIENTE_RESPONDIO)
+
+**Mobile (1 día):**
+```
+google-services.json (Android) / GoogleService-Info.plist (iOS) en proyecto
+FirebaseMessaging.instance.getToken() al login → PATCH /users/me/fcm-token
+Foreground  → FirebaseMessaging.onMessage → SnackBar con "Ver trámite" → navega
+Background  → FirebaseMessaging.onMessageOpenedApp → go_router push /:id
+Terminated  → FirebaseMessaging.instance.getInitialMessage → go_router push /:id
+```
+
+Payload FCM que el backend envía:
+```json
+{ "notification": { "title": "...", "body": "..." },
+  "data": { "tramiteId": "...", "tipo": "TAREA_ASIGNADA" } }
+```
+
+---
+
+### Seguridad mobile
+- JWT en `flutter_secure_storage` (key: `access_token`), NUNCA en SharedPreferences
+- User JSON en `flutter_secure_storage` (key: `current_user`)
+- Cada request lleva `Authorization: Bearer $token` — centralizado en api_client.dart
+- Rol detectado de `rolNombre` en respuesta de `/auth/login`
+- Rutas protegidas en go_router con `redirect` que chequea token + rol
+
+---
+
+### Preparación para Chatbot (Fase 2)
+- El backend AI Service (FastAPI :8001) ya existe
+- Para fase 2: agregar `/chat` endpoint en FastAPI que recibe contexto del trámite + pregunta
+- Mobile: agregar `ChatScreen` con historial de mensajes y contexto del tramite actual
+- No acoplar lógica de chat a los repositorios de trámites — mantener separado en `chat_repository.dart`
+
+---
+
+## Infraestructura actual
+
+| Servicio | Puerto | Estado |
+|---------|--------|--------|
+| Backend Spring Boot 3.5 | :8080 | UP |
+| Frontend Angular 17 | :4200 | UP |
+| AI Service FastAPI | :8001 | UP |
+| MongoDB 7.0 | :27017 | UP |

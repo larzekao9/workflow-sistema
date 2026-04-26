@@ -61,6 +61,9 @@ public class User implements UserDetails {
     @Field("activo")
     private boolean activo = true;
 
+    @Field("fcm_token")
+    private String fcmToken;
+
     @Field("ultimo_acceso")
     private LocalDateTime ultimoAcceso;
 
