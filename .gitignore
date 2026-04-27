@@ -1,7 +1,10 @@
-# Ignorar archivos y directorios de Claude
+# Ignorar archivos y directorios de Claude/Cursor/AI tools
 .claude/
+.cursor/
+.cursorrules
+.kiro/
 CLAUDE.md
-CLAUDE. local.md 
+CLAUDE.local.md
 
 # Node y Frontend
 node_modules/
