@@ -2,9 +2,14 @@
 .claude/
 .cursor/
 .cursorrules
+.cursorrules 2
+.windsurfrules
+.windsurfrules 2
 .kiro/
 CLAUDE.md
 CLAUDE.local.md
+CLAUDE. local.md*
+prompts_operativos_claude_workflow.md
 
 # Node y Frontend
 node_modules/
