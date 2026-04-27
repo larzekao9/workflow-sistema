@@ -85,6 +85,58 @@ class ApiClient {
     }
   }
 
+  /// Like [get] but expects the response body to be a JSON array.
+  Future<List<dynamic>> getList(String path,
+      {bool requiresAuth = true}) async {
+    try {
+      final response = await _http
+          .get(
+            _uri(path),
+            headers: await _headers(requiresAuth: requiresAuth),
+          )
+          .timeout(AppConstants.requestTimeout);
+      final body = response.body;
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        if (body.isEmpty) return const [];
+        try {
+          return jsonDecode(body) as List<dynamic>;
+        } catch (e) {
+          throw ApiException(
+            'Respuesta inválida del servidor',
+            statusCode: response.statusCode,
+          );
+        }
+      }
+      // Reuse non-2xx handling from _parse via a dummy map parse.
+      _parse(response);
+      return const [];
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      throw ApiException(_networkErrorMessage(e));
+    }
+  }
+
+  /// Like [patch] but with an empty body — used for side-effect endpoints.
+  Future<void> patchEmpty(String path, {bool requiresAuth = true}) async {
+    try {
+      final response = await _http
+          .patch(
+            _uri(path),
+            headers: await _headers(requiresAuth: requiresAuth),
+            body: '{}',
+          )
+          .timeout(AppConstants.requestTimeout);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        _parse(response); // will throw ApiException
+      }
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      throw ApiException(_networkErrorMessage(e));
+    }
+  }
+
   Future<Map<String, dynamic>> post(
     String path,
     Map<String, dynamic> body, {

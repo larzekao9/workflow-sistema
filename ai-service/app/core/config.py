@@ -4,9 +4,11 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     anthropic_api_key: str = "set-in-env"
+    groq_api_key: str = "set-in-env"
     claude_model: str = "claude-sonnet-4-6"
-    max_tokens: int = 2048
-    timeout_seconds: int = 30
+    groq_model: str = "llama-3.3-70b-versatile"
+    max_tokens: int = 8000
+    timeout_seconds: int = 60
     cors_origins: list[str] = ["http://localhost:4200", "http://localhost:8080"]
 
     class Config:

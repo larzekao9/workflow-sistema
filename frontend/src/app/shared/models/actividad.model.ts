@@ -49,11 +49,12 @@ export interface ActividadPropiedadesRequest {
 export interface CreateActividadRequest {
   politicaId: string;
   nombre: string;
-  descripcion: string;
+  descripcion?: string;
   tipo: TipoActividad;
   responsableRolId?: string | null;
+  departmentId?: string | null;
   formularioId?: string | null;
-  posicion: { x: number; y: number };
+  posicion?: { x: number; y: number };
   transiciones?: Transicion[];
   tiempoLimiteHoras?: number | null;
 }

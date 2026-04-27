@@ -9,6 +9,9 @@ class HistorialList extends StatelessWidget {
   final List<HistorialEntryDTO> historial;
 
   static final _dateFormat = DateFormat('dd/MM/yyyy HH:mm');
+  // Bolivia Standard Time = UTC-4, no DST
+  static DateTime _toBolivia(DateTime dt) =>
+      dt.toUtc().subtract(const Duration(hours: 4));
 
   @override
   Widget build(BuildContext context) {
@@ -60,7 +63,7 @@ class HistorialList extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: Text(
-                      _dateFormat.format(entry.timestamp!),
+                      _dateFormat.format(_toBolivia(entry.timestamp!)),
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
                             color: Colors.grey[500],
                           ),

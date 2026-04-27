@@ -348,21 +348,24 @@ public class TramiteService {
         String clienteId = tramite.getClienteId();
         String politicaNombre = tramite.getPoliticaNombre() != null
                 ? tramite.getPoliticaNombre() : tramite.getPoliticaId();
+        String obsTexto = req.getObservaciones() != null && !req.getObservaciones().isBlank()
+                ? " Motivo: " + req.getObservaciones() : "";
         switch (req.getAccion()) {
             case RECHAZAR -> fcmService.enviarPush(clienteId,
                     "Trámite rechazado",
-                    "Tu trámite de " + politicaNombre + " ha sido rechazado.",
+                    "Tu trámite de " + politicaNombre + " fue rechazado." + obsTexto,
                     tramiteId, Notificacion.TipoNotificacion.TRAMITE_RECHAZADO);
             case DEVOLVER -> fcmService.enviarPush(clienteId,
-                    "Trámite devuelto",
-                    "Tu trámite de " + politicaNombre + " fue devuelto para correcciones.",
+                    "Trámite devuelto para corrección",
+                    "Tu trámite de " + politicaNombre + " fue devuelto." + obsTexto,
                     tramiteId, Notificacion.TipoNotificacion.TRAMITE_AVANZADO);
             case APROBAR -> {
+                String etapaSig = tramite.getEtapaActual() != null && tramite.getEtapaActual().getNombre() != null
+                        ? " Etapa actual: " + tramite.getEtapaActual().getNombre() + "." : "";
                 fcmService.enviarPush(clienteId,
                         "Trámite avanzado",
-                        "Tu trámite de " + politicaNombre + " ha avanzado a la siguiente etapa.",
+                        "Tu trámite de " + politicaNombre + " avanzó a la siguiente etapa." + etapaSig,
                         tramiteId, Notificacion.TipoNotificacion.TRAMITE_AVANZADO);
-                // Notificar al nuevo funcionario asignado si la asignación automática seleccionó uno
                 String nuevoAsignado = tramite.getAsignadoAId();
                 if (nuevoAsignado != null && !nuevoAsignado.equals(responsableId)) {
                     fcmService.enviarPush(nuevoAsignado,
@@ -371,7 +374,11 @@ public class TramiteService {
                             tramiteId, Notificacion.TipoNotificacion.TAREA_ASIGNADA);
                 }
             }
-            default -> { /* ESCALAR — sin notificación FCM definida */ }
+            case ESCALAR -> fcmService.enviarPush(clienteId,
+                    "Trámite escalado",
+                    "Tu trámite de " + politicaNombre + " fue escalado para revisión." + obsTexto,
+                    tramiteId, Notificacion.TipoNotificacion.TRAMITE_AVANZADO);
+            default -> { }
         }
 
         return TramiteResponse.fromDocument(tramiteRepository.save(tramite));

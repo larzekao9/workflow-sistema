@@ -42,8 +42,8 @@ services:
     container_name: workflow-ai
     ports:
       - "8001:8001"
-    environment:
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    env_file:
+      - ./ai-service/.env
     networks:
       - workflow-net
 

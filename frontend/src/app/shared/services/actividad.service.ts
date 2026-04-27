@@ -21,6 +21,10 @@ export class ActividadService {
     return this.http.get<Actividad[]>(`${this.policiesUrl}/${politicaId}/activities`);
   }
 
+  getByPolicy(politicaId: string): Observable<Actividad[]> {
+    return this.http.get<Actividad[]>(`${this.activitiesUrl}/by-policy/${politicaId}`);
+  }
+
   getById(id: string): Observable<Actividad> {
     return this.http.get<Actividad>(`${this.activitiesUrl}/${id}`);
   }

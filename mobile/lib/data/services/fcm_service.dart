@@ -33,15 +33,16 @@ class FcmService {
 
       final token = await messaging.getToken();
       if (token == null) {
-        debugPrint('[FCM] Token FCM es null — Firebase no configurado?');
+        debugPrint('[FCM] Token FCM es null — verifica google-services.json y APNs');
         return;
       }
 
+      debugPrint('[FCM] Token obtenido: ${token.substring(0, 20)}...');
       await _apiClient.patch('/users/me/fcm-token', {'fcmToken': token});
-      debugPrint('[FCM] Token registrado en backend');
-    } catch (e) {
-      // Never block login if FCM fails.
+      debugPrint('[FCM] Token registrado en backend OK');
+    } catch (e, st) {
       debugPrint('[FCM] Error registrando token: $e');
+      debugPrint('[FCM] StackTrace: $st');
     }
   }
 

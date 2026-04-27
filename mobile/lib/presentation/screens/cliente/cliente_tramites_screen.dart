@@ -6,11 +6,14 @@ import 'package:intl/intl.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/tramite_providers.dart';
 import '../../widgets/estado_chip.dart';
+import '../../widgets/notification_bell.dart';
 
 class ClienteTramitesScreen extends ConsumerWidget {
   const ClienteTramitesScreen({super.key});
 
   static final _dateFormat = DateFormat('dd/MM/yyyy');
+  static DateTime _toBolivia(DateTime dt) =>
+      dt.toUtc().subtract(const Duration(hours: 4));
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -20,6 +23,7 @@ class ClienteTramitesScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Mis Tramites'),
         actions: [
+          const NotificationBell(),
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Cerrar sesion',
@@ -82,7 +86,7 @@ class ClienteTramitesScreen extends ConsumerWidget {
                     leading: EstadoChip(estado: t.estado),
                     title: Text(t.politicaNombre ?? 'Tramite'),
                     subtitle: t.creadoEn != null
-                        ? Text(_dateFormat.format(t.creadoEn!))
+                        ? Text(_dateFormat.format(_toBolivia(t.creadoEn!)))
                         : null,
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () =>
@@ -97,3 +101,4 @@ class ClienteTramitesScreen extends ConsumerWidget {
     );
   }
 }
+

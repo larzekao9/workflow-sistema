@@ -2,17 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../main.dart' show appNavigatorKey;
 import '../presentation/providers/auth_provider.dart';
 import '../presentation/screens/cliente/cliente_tramites_screen.dart';
 import '../presentation/screens/cliente/politicas_list_screen.dart';
 import '../presentation/screens/funcionario/funcionario_bandeja_screen.dart';
 import '../presentation/screens/login/login_screen.dart';
+import '../presentation/screens/shared/notificaciones_screen.dart';
 import '../presentation/screens/shared/tramite_detalle_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final notifier = _RouterNotifier(ref);
 
   return GoRouter(
+    navigatorKey: appNavigatorKey,
     refreshListenable: notifier,
     initialLocation: '/login',
     redirect: (context, state) {
@@ -69,6 +72,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             ),
           ),
         ],
+      ),
+
+      // ── Notificaciones ─────────────────────────────────────────────────────
+      GoRoute(
+        path: '/notificaciones',
+        builder: (_, __) => const NotificacionesScreen(),
       ),
 
       // ── Deep link universal para notificaciones push ───────────────────────

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/tramite_providers.dart';
 import '../../widgets/estado_chip.dart';
+import '../../widgets/notification_bell.dart';
 
 class FuncionarioBandejaScreen extends ConsumerWidget {
   const FuncionarioBandejaScreen({super.key});
@@ -25,6 +26,7 @@ class FuncionarioBandejaScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Bandeja'),
         actions: [
+          const NotificationBell(),
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Cerrar sesion',

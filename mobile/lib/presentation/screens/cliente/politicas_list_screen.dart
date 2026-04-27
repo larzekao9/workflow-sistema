@@ -6,54 +6,40 @@ import '../../../data/models/politica.dart';
 import '../../providers/providers.dart';
 import '../../providers/tramite_providers.dart';
 
-class PoliticasListScreen extends ConsumerWidget {
+class PoliticasListScreen extends ConsumerStatefulWidget {
   const PoliticasListScreen({super.key});
 
-  Future<void> _iniciarTramite(
-    BuildContext context,
-    WidgetRef ref,
-    PoliticaResponse politica,
-  ) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Confirmar inicio'),
-        content: Text('Iniciar tramite: "${politica.nombre}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Confirmar'),
-          ),
-        ],
-      ),
-    );
+  @override
+  ConsumerState<PoliticasListScreen> createState() =>
+      _PoliticasListScreenState();
+}
 
-    if (confirm != true) return;
-    if (!context.mounted) return;
+class _PoliticasListScreenState extends ConsumerState<PoliticasListScreen> {
+  String? _loadingId;
 
+  Future<void> _iniciarTramite(PoliticaResponse politica) async {
+    setState(() => _loadingId = politica.id);
     try {
       final tramite = await ref
           .read(tramiteRepositoryProvider)
           .crear(politica.id);
       ref.invalidate(misTramitesProvider);
-      if (context.mounted) {
+      if (mounted) {
         context.go('/cliente/tramites/${tramite.id}');
       }
     } catch (e) {
-      if (context.mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(e.toString())),
         );
       }
+    } finally {
+      if (mounted) setState(() => _loadingId = null);
     }
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final politicasAsync = ref.watch(politicasPublicasProvider);
 
     return Scaffold(
@@ -85,6 +71,8 @@ class PoliticasListScreen extends ConsumerWidget {
             itemCount: politicas.length,
             itemBuilder: (context, index) {
               final p = politicas[index];
+              final isLoading = _loadingId == p.id;
+
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
                 child: Padding(
@@ -111,9 +99,17 @@ class PoliticasListScreen extends ConsumerWidget {
                       Align(
                         alignment: Alignment.centerRight,
                         child: ElevatedButton(
-                          onPressed: () =>
-                              _iniciarTramite(context, ref, p),
-                          child: const Text('Iniciar'),
+                          onPressed: (_loadingId != null)
+                              ? null
+                              : () => _iniciarTramite(p),
+                          child: isLoading
+                              ? const SizedBox(
+                                  height: 18,
+                                  width: 18,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2),
+                                )
+                              : const Text('Iniciar'),
                         ),
                       ),
                     ],

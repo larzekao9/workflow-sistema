@@ -8,6 +8,7 @@ import '../../data/services/api_client.dart';
 import '../../data/services/auth_service.dart';
 import '../../data/services/fcm_service.dart';
 import '../../data/services/file_service.dart';
+import '../../data/services/notificacion_service.dart';
 import '../../data/services/politica_service.dart';
 import '../../data/services/tramite_service.dart';
 
@@ -62,4 +63,10 @@ final politicaServiceProvider = Provider<PoliticaService>((ref) {
 final politicaRepositoryProvider = Provider<PoliticaRepository>((ref) {
   return PoliticaRepository(
       politicaService: ref.watch(politicaServiceProvider));
+});
+
+// ── Notificaciones ────────────────────────────────────────────────────────────
+
+final notificacionServiceProvider = Provider<NotificacionService>((ref) {
+  return NotificacionService(apiClient: ref.watch(apiClientProvider));
 });

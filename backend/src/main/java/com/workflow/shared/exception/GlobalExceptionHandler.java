@@ -55,8 +55,8 @@ public class GlobalExceptionHandler {
             String errorMessage = error.getDefaultMessage();
             fieldErrors.put(fieldName, errorMessage);
         });
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new ErrorResponse(HttpStatus.BAD_REQUEST.value(), "Error de validación", LocalDateTime.now(), fieldErrors));
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .body(new ErrorResponse(HttpStatus.UNPROCESSABLE_ENTITY.value(), "Error de validación", LocalDateTime.now(), fieldErrors));
     }
 
     @ExceptionHandler(BadCredentialsException.class)

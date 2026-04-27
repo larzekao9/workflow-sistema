@@ -5,7 +5,9 @@ import {
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup } from '@angular/forms';
-import { Subject, debounceTime, takeUntil, interval } from 'rxjs';
+import { Subject, debounceTime, takeUntil, interval, firstValueFrom } from 'rxjs';
+import { HttpClient, HttpClientModule } from '@angular/common/http';
+import { environment } from '../../../environments/environment';
 
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -24,15 +26,17 @@ import { PoliticaService } from '../../shared/services/politica.service';
 import { RoleService } from '../../shared/services/role.service';
 import { ActividadService } from '../../shared/services/actividad.service';
 import { DepartmentService } from '../../shared/services/department.service';
+import { UserService } from '../../shared/services/user.service';
 import { AiService } from '../../shared/services/ai.service';
 import { AuthService } from '../../shared/services/auth.service';
 import { ConfirmDialogComponent } from '../../shared/components/confirm-dialog/confirm-dialog.component';
 import { Politica } from '../../shared/models/politica.model';
-import { Actividad, AccionPermitida, CampoActividad } from '../../shared/models/actividad.model';
+import { Actividad, AccionPermitida, CampoActividad, Transicion } from '../../shared/models/actividad.model';
 import { CollaborationService } from '../../shared/services/collaboration.service';
 import { Collaborator } from '../../shared/models/collaborator.model';
 import { BpmnUpdate } from '../../shared/services/collaboration.service';
 import { ChatMessage } from '../../shared/models/bpmn-command.model';
+import { WorkflowGenerateResponse } from '../../shared/models/workflow-generate.model';
 
 // bpmn-js
 import BpmnModeler from 'bpmn-js/lib/Modeler';
@@ -51,6 +55,7 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
   encapsulation: ViewEncapsulation.None,
   imports: [
     CommonModule, RouterModule, FormsModule, ReactiveFormsModule,
+    HttpClientModule,
     MatButtonModule, MatIconModule, MatTooltipModule, MatSnackBarModule,
     MatProgressSpinnerModule, MatSelectModule, MatFormFieldModule,
     MatInputModule, MatDividerModule, MatChipsModule, MatDialogModule,
@@ -175,80 +180,133 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
         </button>
       </div>
 
-      <!-- Historial de mensajes -->
-      <div class="ai-messages" #messagesContainer>
-        <div *ngIf="chatMessages.length === 0" class="ai-empty-hint">
-          <mat-icon>tips_and_updates</mat-icon>
-          <p>Describe los cambios que quieres hacer en el diagrama.</p>
-          <p class="ai-hint-examples">
-            <em>"Agrega una tarea de validación de documentos"</em><br>
-            <em>"Conecta la tarea de revisión con el gateway de aprobación"</em><br>
-            <em>"Agrega un gateway exclusivo después de la tarea de recepción"</em>
-          </p>
-        </div>
+      <!-- ── GENERAR WORKFLOW ── -->
+      <ng-container>
+        <div class="ai-gen-body">
 
-        <div *ngFor="let msg of chatMessages; let i = index"
-             class="ai-message"
-             [ngClass]="msg.role === 'user' ? 'ai-message--user' : 'ai-message--assistant'">
-          <div class="ai-message-bubble">
-            <span>{{ msg.text }}</span>
+          <!-- Proveedor -->
+          <div class="ai-gen-field-group">
+            <label class="ai-gen-label" for="ai-proveedor">Proveedor</label>
+            <select id="ai-proveedor"
+                    class="ai-gen-select"
+                    [(ngModel)]="aiProveedor"
+                    [disabled]="isGenerating || isApplying"
+                    aria-label="Seleccionar proveedor de IA">
+              <option value="claude">Claude (recomendado)</option>
+              <option value="groq">Groq (gratis)</option>
+            </select>
+          </div>
 
-            <!-- Operaciones realizadas -->
-            <div *ngIf="msg.operations && msg.operations.length > 0" class="ai-operations">
-              <div *ngFor="let op of msg.operations" class="ai-op-item">
-                <mat-icon class="ai-op-icon">check_circle</mat-icon>
-                {{ op.description }}
+          <!-- Prompt -->
+          <div class="ai-gen-field-group">
+            <label class="ai-gen-label" for="ai-gen-prompt">Describe el proceso de negocio</label>
+            <div class="ai-gen-prompt-wrap">
+              <textarea id="ai-gen-prompt"
+                        class="ai-gen-textarea"
+                        [(ngModel)]="aiGeneratePrompt"
+                        placeholder="Ej: Proceso de solicitud de vacaciones con aprobacion del supervisor y validacion de RRHH..."
+                        [disabled]="isGenerating || isApplying"
+                        rows="5"
+                        aria-label="Descripcion del proceso de negocio"></textarea>
+              <button mat-icon-button class="ai-gen-mic-btn"
+                      [class.ai-mic-active]="isListeningGen"
+                      [style.color]="isListeningGen ? '#ef4444' : '#a78bfa'"
+                      (click)="toggleVoiceInputGen()"
+                      [matTooltip]="isListeningGen ? 'Detener grabación' : 'Describir por voz'"
+                      [disabled]="isGenerating || isApplying"
+                      type="button">
+                <mat-icon>{{ isListeningGen ? 'mic_off' : 'mic' }}</mat-icon>
+              </button>
+            </div>
+          </div>
+
+          <!-- Boton generar -->
+          <button class="ai-gen-btn"
+                  (click)="generateWorkflow()"
+                  [disabled]="isGenerating || isApplying || !aiGeneratePrompt.trim()"
+                  aria-label="Generar workflow con IA">
+            <mat-spinner *ngIf="isGenerating" diameter="14" style="display:inline-flex"></mat-spinner>
+            <mat-icon *ngIf="!isGenerating">auto_fix_high</mat-icon>
+            {{ isGenerating ? 'Generando...' : 'Generar workflow' }}
+          </button>
+
+          <!-- Preview del workflow generado -->
+          <div *ngIf="generatedWorkflow" class="ai-gen-preview">
+            <div class="ai-gen-preview-header">
+              <mat-icon style="color:#86efac;font-size:16px;width:16px;height:16px">check_circle</mat-icon>
+              <span>Workflow generado</span>
+            </div>
+
+            <div class="ai-gen-preview-row">
+              <span class="ai-gen-preview-key">Nombre</span>
+              <span class="ai-gen-preview-val">{{ generatedWorkflow.politicaNombre }}</span>
+            </div>
+
+            <div class="ai-gen-preview-row" *ngIf="generatedWorkflow.departamentos.length > 0">
+              <span class="ai-gen-preview-key">Departamentos</span>
+              <div class="ai-gen-chips">
+                <span *ngFor="let d of generatedWorkflow.departamentos" class="ai-gen-chip">{{ d.nombre }}</span>
               </div>
             </div>
 
-            <!-- Botones de preview pendiente -->
-            <div *ngIf="msg.pendingXml" class="ai-preview-actions">
-              <button mat-raised-button color="primary" class="ai-apply-btn"
-                      (click)="applyAiChanges(i)">
-                <mat-icon>check</mat-icon> Aplicar
+            <div class="ai-gen-preview-row" *ngIf="generatedWorkflow.actividades.length > 0">
+              <span class="ai-gen-preview-key">Actividades</span>
+              <div class="ai-gen-acts">
+                <div *ngFor="let a of generatedWorkflow.actividades" class="ai-gen-act-item">
+                  <mat-icon style="font-size:12px;width:12px;height:12px;color:#818cf8;flex-shrink:0">task_alt</mat-icon>
+                  <span>{{ a.nombre }}</span>
+                  <span class="ai-gen-act-campos" *ngIf="a.campos.length > 0">{{ a.campos.length }} campo{{ a.campos.length !== 1 ? 's' : '' }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Status de apply -->
+            <div *ngIf="applyStatus" class="ai-gen-status" aria-live="polite">
+              <mat-spinner *ngIf="isApplying" diameter="12" style="display:inline-flex;flex-shrink:0"></mat-spinner>
+              <mat-icon *ngIf="!isApplying" style="font-size:13px;width:13px;height:13px;color:#86efac;flex-shrink:0">check</mat-icon>
+              <span>{{ applyStatus }}</span>
+            </div>
+
+            <!-- Acciones -->
+            <div class="ai-gen-actions">
+              <button class="ai-gen-apply-btn"
+                      (click)="applyGeneratedWorkflow()"
+                      [disabled]="isApplying || isGenerating"
+                      aria-label="Aplicar workflow generado al editor">
+                <mat-spinner *ngIf="isApplying" diameter="14" style="display:inline-flex"></mat-spinner>
+                <mat-icon *ngIf="!isApplying">rocket_launch</mat-icon>
+                {{ isApplying ? 'Aplicando...' : 'Aplicar workflow' }}
               </button>
-              <button mat-stroked-button class="ai-discard-btn"
-                      (click)="discardAiChanges(i)">
-                <mat-icon>close</mat-icon> Descartar
+              <button class="ai-gen-discard-btn"
+                      (click)="generatedWorkflow = null; applyStatus = ''"
+                      [disabled]="isApplying"
+                      aria-label="Descartar workflow generado">
+                <mat-icon>delete_outline</mat-icon>
+                Descartar
+              </button>
+            </div>
+
+            <!-- Refinar workflow -->
+            <div class="ai-gen-refine" *ngIf="generatedWorkflow && !isApplying">
+              <div class="ai-gen-refine-label">Refinar resultado</div>
+              <textarea class="ai-textarea ai-gen-refine-input"
+                        [(ngModel)]="aiRefinePrompt"
+                        placeholder='Ej: "simplifica a 3 pasos" o "agrega validación de documentos"'
+                        [disabled]="isRefining"
+                        rows="2"></textarea>
+              <button class="ai-gen-apply-btn ai-gen-refine-btn"
+                      (click)="refineWorkflow()"
+                      [disabled]="isRefining || !aiRefinePrompt.trim()">
+                <mat-spinner *ngIf="isRefining" diameter="14" style="display:inline-flex"></mat-spinner>
+                <mat-icon *ngIf="!isRefining">tune</mat-icon>
+                {{ isRefining ? 'Refinando...' : 'Refinar' }}
               </button>
             </div>
           </div>
-        </div>
 
-        <!-- Indicador de carga -->
-        <div *ngIf="isAiLoading" class="ai-message ai-message--assistant">
-          <div class="ai-message-bubble ai-loading-bubble">
-            <mat-spinner diameter="16" style="display:inline-block"></mat-spinner>
-            <span style="margin-left:8px">Analizando diagrama...</span>
-          </div>
         </div>
-      </div>
+      </ng-container>
 
-      <!-- Input area -->
-      <div class="ai-input-area">
-        <textarea class="ai-textarea"
-                  [(ngModel)]="aiPrompt"
-                  placeholder="Describe el cambio que deseas hacer..."
-                  (keydown.enter)="onAiEnterKey($event)"
-                  [disabled]="isAiLoading"
-                  rows="3"></textarea>
-        <div class="ai-input-actions">
-          <button mat-icon-button
-                  [class.ai-mic-active]="isListening"
-                  [style.color]="isListening ? '#ef4444' : ''"
-                  (click)="toggleVoiceInput()"
-                  [matTooltip]="isListening ? 'Detener grabación' : 'Hablar'"
-                  [disabled]="isAiLoading">
-            <mat-icon>{{ isListening ? 'mic_off' : 'mic' }}</mat-icon>
-          </button>
-          <button mat-raised-button color="accent"
-                  (click)="sendAiCommand()"
-                  [disabled]="isAiLoading || !aiPrompt.trim()"
-                  class="ai-send-btn">
-            <mat-icon>send</mat-icon>
-          </button>
-        </div>
-      </div>
     </div>
 
     <!-- Canvas bpmn-js -->
@@ -1274,6 +1332,294 @@ import workflowDescriptor from '../../shared/bpmn/workflow-moddle-descriptor.jso
       background: #f5f3ff !important;
     }
 
+    /* ── AI Panel mode toggle ─────────────────────────────── */
+    .ai-mode-toggle {
+      display: flex;
+      background: #0a1020;
+      border-bottom: 1px solid #1e293b;
+      flex-shrink: 0;
+    }
+    .ai-mode-btn {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      padding: 8px 4px;
+      border: none;
+      background: transparent;
+      color: #64748b;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: color 0.15s, border-bottom-color 0.15s, background 0.15s;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .ai-mode-btn mat-icon {
+      font-size: 14px;
+      width: 14px;
+      height: 14px;
+    }
+    .ai-mode-btn:hover {
+      color: #94a3b8;
+      background: rgba(255,255,255,0.04);
+    }
+    .ai-mode-btn:focus-visible {
+      outline: 2px solid #6366f1;
+      outline-offset: -2px;
+    }
+    .ai-mode-btn--active {
+      color: #a78bfa !important;
+      border-bottom-color: #a78bfa !important;
+      background: rgba(167,139,250,0.07) !important;
+    }
+    /* ── AI Generar Workflow mode ─────────────────────────── */
+    .ai-gen-body {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 12px;
+      padding-bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .ai-gen-body::-webkit-scrollbar { width: 4px; }
+    .ai-gen-body::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+    .ai-gen-field-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .ai-gen-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #94a3b8;
+    }
+    .ai-gen-select {
+      width: 100%;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      color: #e2e8f0;
+      font-size: 12px;
+      padding: 7px 10px;
+      outline: none;
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2364748b' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14L2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      padding-right: 28px;
+      box-sizing: border-box;
+    }
+    .ai-gen-select:focus { border-color: #6366f1; }
+    .ai-gen-select:disabled { opacity: 0.5; cursor: not-allowed; }
+    .ai-gen-textarea {
+      width: 100%;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      color: #e2e8f0;
+      font-size: 12px;
+      padding: 8px 10px;
+      resize: vertical;
+      min-height: 90px;
+      outline: none;
+      font-family: inherit;
+      line-height: 1.5;
+      box-sizing: border-box;
+    }
+    .ai-gen-textarea:focus { border-color: #6366f1; }
+    .ai-gen-textarea::placeholder { color: #475569; }
+    .ai-gen-textarea:disabled { opacity: 0.5; cursor: not-allowed; }
+    .ai-gen-prompt-wrap {
+      position: relative;
+      display: flex;
+    }
+    .ai-gen-prompt-wrap .ai-gen-textarea {
+      flex: 1;
+      padding-right: 36px;
+    }
+    .ai-gen-mic-btn {
+      position: absolute;
+      right: 2px;
+      bottom: 4px;
+      width: 30px !important;
+      height: 30px !important;
+      line-height: 30px !important;
+      padding: 0 !important;
+      min-width: 30px !important;
+    }
+    .ai-gen-mic-btn mat-icon { font-size: 18px; width: 18px; height: 18px; }
+    .ai-gen-mic-btn.ai-mic-active { animation: ai-mic-pulse 1s infinite; }
+    @keyframes ai-mic-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .ai-gen-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      padding: 9px 12px;
+      background: linear-gradient(135deg, #4f46e5, #7c3aed);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+      letter-spacing: 0.02em;
+    }
+    .ai-gen-btn:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+    .ai-gen-btn:active:not(:disabled) { transform: translateY(0); }
+    .ai-gen-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    .ai-gen-btn mat-icon { font-size: 15px; width: 15px; height: 15px; }
+    /* Preview card */
+    .ai-gen-preview {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .ai-gen-preview-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 10px;
+      background: rgba(134,239,172,0.08);
+      border-bottom: 1px solid #334155;
+      font-size: 11px;
+      font-weight: 700;
+      color: #86efac;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .ai-gen-preview-row {
+      padding: 7px 10px;
+      border-bottom: 1px solid #0f172a;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .ai-gen-preview-row:last-child { border-bottom: none; }
+    .ai-gen-preview-key {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #475569;
+    }
+    .ai-gen-preview-val {
+      font-size: 12px;
+      color: #e2e8f0;
+      font-weight: 500;
+    }
+    .ai-gen-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 2px;
+    }
+    .ai-gen-chip {
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: rgba(99,102,241,0.2);
+      color: #a5b4fc;
+      border: 1px solid rgba(99,102,241,0.3);
+      white-space: nowrap;
+    }
+    .ai-gen-acts {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      margin-top: 2px;
+    }
+    .ai-gen-act-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      color: #cbd5e1;
+    }
+    .ai-gen-act-campos {
+      margin-left: auto;
+      font-size: 9px;
+      color: #475569;
+      background: #0f172a;
+      padding: 1px 6px;
+      border-radius: 8px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .ai-gen-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      font-size: 11px;
+      color: #94a3b8;
+      background: rgba(99,102,241,0.06);
+      border-top: 1px solid #0f172a;
+    }
+    .ai-gen-actions {
+      display: flex;
+      gap: 6px;
+      padding: 8px 10px;
+      border-top: 1px solid #0f172a;
+    }
+    .ai-gen-apply-btn {
+      flex: 2;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      padding: 7px 8px;
+      background: #16a34a;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .ai-gen-apply-btn:hover:not(:disabled) { opacity: 0.85; }
+    .ai-gen-apply-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .ai-gen-apply-btn mat-icon { font-size: 13px; width: 13px; height: 13px; }
+    .ai-gen-discard-btn {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      padding: 7px 8px;
+      background: transparent;
+      color: #64748b;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .ai-gen-discard-btn:hover:not(:disabled) { color: #94a3b8; border-color: #475569; }
+    .ai-gen-discard-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .ai-gen-discard-btn mat-icon { font-size: 13px; width: 13px; height: 13px; }
+
+    .ai-gen-refine { margin-top: 10px; padding-top: 10px; border-top: 1px solid #334155; }
+    .ai-gen-refine-label { font-size: 11px; color: #94a3b8; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .5px; }
+    .ai-gen-refine-input { font-size: 12px; padding: 6px 8px; border-radius: 6px; }
+    .ai-gen-refine-btn { margin-top: 6px; width: 100%; justify-content: center; }
+
     /* Responsive */
     @media (max-width: 768px) {
       .task-props-panel {
@@ -1335,6 +1681,19 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
   isListening = false;
   private recognition: any = null;
 
+  // AI Generar Workflow
+  aiProveedor = 'claude';
+  aiGeneratePrompt = '';
+  isGenerating = false;
+  generatedWorkflow: WorkflowGenerateResponse | null = null;
+  aiRefinePrompt = '';
+  isRefining = false;
+  isApplying = false;
+  applyStatus = '';
+  isListeningGen = false;
+  private mediaRecorder: MediaRecorder | null = null;
+  private audioChunks: Blob[] = [];
+
   currentUserEmail: string | null = null;
 
   private modeler: any = null;
@@ -1348,13 +1707,15 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
     private roleService: RoleService,
     private actividadService: ActividadService,
     private departmentService: DepartmentService,
+    private userService: UserService,
     private aiService: AiService,
     private snackBar: MatSnackBar,
     private dialog: MatDialog,
     private cdr: ChangeDetectorRef,
     private collaborationService: CollaborationService,
     private authService: AuthService,
-    private fb: FormBuilder
+    private fb: FormBuilder,
+    private http: HttpClient
   ) {
     this.propsForm = this.fb.group({
       nombre:            [''],
@@ -1413,6 +1774,9 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
     }
     if (this.recognition) {
       this.recognition.stop();
+    }
+    if (this.mediaRecorder?.state === 'recording') {
+      this.mediaRecorder.stop();
     }
   }
 
@@ -1874,12 +2238,320 @@ export class FlowEditorComponent implements OnInit, OnDestroy {
     this.cdr.detectChanges();
   }
 
+  async toggleVoiceInputGen(): Promise<void> {
+    if (this.isListeningGen) {
+      this.mediaRecorder?.stop();
+      return;
+    }
+
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err) {
+      console.error('[VoiceInput] No se pudo acceder al micrófono:', err);
+      this.snackBar.open('No se pudo acceder al micrófono', 'OK', { duration: 3000 });
+      return;
+    }
+
+    this.audioChunks = [];
+    this.mediaRecorder = new MediaRecorder(stream);
+
+    this.mediaRecorder.ondataavailable = (e: BlobEvent) => {
+      if (e.data.size > 0) {
+        this.audioChunks.push(e.data);
+      }
+    };
+
+    this.mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      this.isListeningGen = false;
+      this.cdr.detectChanges();
+
+      const blob = new Blob(this.audioChunks, { type: 'audio/webm' });
+      const formData = new FormData();
+      formData.append('audio', blob, 'audio.webm');
+
+      try {
+        const result = await firstValueFrom(
+          this.http.post<{ text: string }>(`${environment.aiServiceUrl}/ai/transcribe`, formData)
+        );
+        if (result?.text) {
+          this.aiGeneratePrompt = (this.aiGeneratePrompt ? this.aiGeneratePrompt + ' ' : '') + result.text.trim();
+          this.cdr.detectChanges();
+        }
+      } catch (err) {
+        console.error('[VoiceInput] Error al transcribir audio con Groq Whisper:', err);
+        this.snackBar.open('Error al transcribir el audio', 'OK', { duration: 3000 });
+      }
+    };
+
+    this.mediaRecorder.start();
+    this.isListeningGen = true;
+    this.cdr.detectChanges();
+  }
+
   private scrollMessages(): void {
     setTimeout(() => {
       if (this.messagesContainer?.nativeElement) {
         this.messagesContainer.nativeElement.scrollTop = this.messagesContainer.nativeElement.scrollHeight;
       }
     }, 50);
+  }
+
+  // ── AI Generar Workflow — Sprint AI-2 ─────────────────────
+
+  async generateWorkflow(): Promise<void> {
+    if (!this.aiGeneratePrompt.trim()) return;
+    this.isGenerating = true;
+    this.generatedWorkflow = null;
+    this.applyStatus = '';
+    this.cdr.detectChanges();
+
+    let deptsExistentes: string[] = [];
+    try {
+      const depts = await firstValueFrom(this.departmentService.getAll());
+      deptsExistentes = depts.map(d => d.nombre);
+    } catch {
+      // non-blocking: continue without existing departments context
+    }
+
+    try {
+      this.generatedWorkflow = await firstValueFrom(
+        this.aiService.generateWorkflow({
+          prompt: this.aiGeneratePrompt,
+          politicaNombre: this.politica?.nombre,
+          departamentosExistentes: deptsExistentes,
+          proveedor: this.aiProveedor
+        })
+      );
+    } catch (e: unknown) {
+      const err = e as { error?: { detail?: string }; message?: string };
+      this.snackBar.open(
+        'Error generando workflow: ' + (err?.error?.detail ?? err?.message ?? 'Error desconocido'),
+        'OK',
+        { duration: 5000 }
+      );
+      console.error('[AI Generate] Error:', e);
+    } finally {
+      this.isGenerating = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  async refineWorkflow(): Promise<void> {
+    if (!this.generatedWorkflow || !this.aiRefinePrompt.trim()) return;
+    this.isRefining = true;
+    try {
+      const refined = await firstValueFrom(this.aiService.refineWorkflow({
+        bpmnXml: this.generatedWorkflow.bpmnXml,
+        actividades: this.generatedWorkflow.actividades,
+        instruccion: this.aiRefinePrompt,
+        politicaNombre: this.generatedWorkflow.politicaNombre,
+        proveedor: this.aiProveedor,
+      }));
+      this.generatedWorkflow = refined;
+      this.aiRefinePrompt = '';
+    } catch (e: any) {
+      this.snackBar.open('Error refinando: ' + (e?.error?.detail || e.message), 'OK', { duration: 5000 });
+    } finally {
+      this.isRefining = false;
+      this.cdr.detectChanges();
+    }
+  }
+
+  async applyGeneratedWorkflow(): Promise<void> {
+    if (!this.generatedWorkflow || !this.politicaId) return;
+    this.isApplying = true;
+    this.applyStatus = 'Iniciando...';
+    this.cdr.detectChanges();
+
+    const wf = this.generatedWorkflow;
+
+    try {
+      // ── Roles ──────────────────────────────────────────────────────────────
+      this.applyStatus = 'Obteniendo roles...';
+      this.cdr.detectChanges();
+      const roles = await firstValueFrom(this.roleService.getAll()).catch(() => [] as any[]);
+      const rolFuncId  = roles.find((r: any) => r.nombre?.toUpperCase() === 'FUNCIONARIO')?.id ?? '';
+      const rolCliId   = roles.find((r: any) => r.nombre?.toUpperCase() === 'CLIENTE')?.id ?? '';
+      if (!rolFuncId || !rolCliId) {
+        this.snackBar.open('No se pudieron obtener los roles FUNCIONARIO/CLIENTE', 'OK', { duration: 5000 });
+        this.isApplying = false; return;
+      }
+
+      // ── Departamentos ──────────────────────────────────────────────────────
+      this.applyStatus = 'Creando departamentos...';
+      this.cdr.detectChanges();
+      const existingDepts = await firstValueFrom(this.departmentService.getAll());
+      const deptMap: Record<string, string> = {};
+      for (const d of existingDepts) deptMap[d.nombre.trim().toLowerCase()] = d.id;
+
+      for (const dept of wf.departamentos) {
+        const key = dept.nombre.trim().toLowerCase();
+        if (!deptMap[key]) {
+          const created = await firstValueFrom(
+            this.departmentService.create({ nombre: dept.nombre, descripcion: dept.descripcion, activa: true })
+          ).catch((e) => { console.warn('[AI] dept create failed:', e?.error || e); return null as any; });
+          if (created?.id) { deptMap[key] = created.id; }
+          else {
+            // fallback: re-fetch en caso de que ya exista
+            const refetch = await firstValueFrom(this.departmentService.getAll()).catch(() => existingDepts);
+            for (const d of refetch) deptMap[d.nombre.trim().toLowerCase()] = d.id;
+          }
+        }
+      }
+
+      // Re-fetch final para asegurar mapa completo y actualizado
+      const allDepts = await firstValueFrom(this.departmentService.getAll()).catch(() => existingDepts);
+      for (const d of allDepts) deptMap[d.nombre.trim().toLowerCase()] = d.id;
+
+      // Fuzzy lookup: si no hay match exacto, busca substring (maneja variaciones de la IA)
+      const findDeptId = (name: string | null): string | undefined => {
+        if (!name?.trim()) return undefined;
+        const key = name.trim().toLowerCase();
+        if (deptMap[key]) return deptMap[key];
+        // substring match bidireccional
+        const entry = Object.entries(deptMap).find(([k]) => k.includes(key) || key.includes(k));
+        if (entry) { console.log(`[AI] dept fuzzy match: "${name}" → "${entry[0]}"`); return entry[1]; }
+        console.warn(`[AI] dept NOT found: "${name}". deptMap keys:`, Object.keys(deptMap));
+        return undefined;
+      };
+
+      // ── Funcionarios ───────────────────────────────────────────────────────
+      this.applyStatus = 'Creando funcionarios...';
+      this.cdr.detectChanges();
+      for (const func of wf.funcionarios) {
+        const deptId = findDeptId(func.departamento);
+        await firstValueFrom(this.userService.create({
+          email: func.email,
+          username: func.email.split('@')[0],
+          nombreCompleto: func.nombre,
+          password: 'Func2024!',
+          rolId: rolFuncId,
+          departmentId: deptId,
+        })).catch((e: any) => {
+          if (e?.status !== 400) console.error('[AI] user create failed:', e?.error || e);
+          // 400 = usuario ya existe, ignorar
+        });
+      }
+
+      // ── BPMN ───────────────────────────────────────────────────────────────
+      this.applyStatus = 'Aplicando diagrama BPMN...';
+      this.cdr.detectChanges();
+      const { bpmnVersion: newV } = await firstValueFrom(
+        this.politicaService.saveBpmn(this.politicaId!, wf.bpmnXml)
+      );
+      this.localBpmnVersion = newV;
+      if (this.modeler) {
+        this.selectedElement = null;
+        await this.modeler.importXML(wf.bpmnXml);
+        this.modeler.get('canvas').zoom('fit-viewport');
+        this.isDirty = false;
+        this.lastSaved = new Date();
+      }
+
+      // ── Actividades — exactamente como el seed ─────────────────────────────
+      this.applyStatus = 'Creando actividades...';
+      this.cdr.detectChanges();
+
+      // Borrar previas
+      const prevActs = await firstValueFrom(this.actividadService.getByPolicy(this.politicaId!)).catch(() => [] as Actividad[]);
+      for (const p of prevActs) await firstValueFrom(this.actividadService.delete(p.id)).catch(() => {});
+
+      // ── 1. INICIO ───────────────────────────────────────────────────────────
+      const inicioAct = await firstValueFrom(
+        this.actividadService.create({ politicaId: this.politicaId!, nombre: 'Inicio', tipo: 'INICIO' })
+      ).catch((e: any) => { console.error('[AI] create INICIO failed:', e?.error || e); return null as any; });
+
+      // ── 2. TARéAs — POST con departmentId + PATCH propiedades ───────────────
+      const createdActs: Actividad[] = [];
+      for (const actGen of wf.actividades) {
+        const esCliente = actGen.rol === 'CLIENTE' || actGen.departamento === null;
+        const rolId     = esCliente ? rolCliId : rolFuncId;
+        const deptId    = findDeptId(actGen.departamento);
+        console.log(`[AI] actividad "${actGen.nombre}" → rol=${actGen.rol} dept="${actGen.departamento}" → deptId=${deptId}`);
+
+        const created = await firstValueFrom(
+          this.actividadService.create({
+            politicaId:      this.politicaId!,
+            nombre:           actGen.nombre,
+            tipo:             'TAREA',
+            responsableRolId: rolId,
+            departmentId:     deptId ?? null,
+          })
+        ).catch((e: any) => {
+          console.error('[AI] create actividad failed:', actGen.nombre, e?.error || e);
+          return null as any;
+        });
+
+        if (!created?.id) continue;
+        createdActs.push(created);
+
+        const campos: CampoActividad[] = (actGen.campos ?? [])
+          .filter(c => c.nombre?.trim())
+          .map(c => ({
+            nombre:   c.nombre.trim(),
+            label:    c.label?.trim() || c.nombre.trim(),
+            tipo:     c.tipo as CampoActividad['tipo'],
+            required: c.required ?? false,
+            opciones: c.opciones?.length > 0 ? c.opciones : undefined,
+          }));
+
+        await firstValueFrom(
+          this.actividadService.updatePropiedades(created.id, {
+            area:               deptId,
+            slaHoras:           actGen.slaHoras > 0 ? actGen.slaHoras : 24,
+            accionesPermitidas: actGen.accionesPermitidas as AccionPermitida[],
+            campos:             campos.length > 0 ? campos : undefined,
+          })
+        ).catch((e: any) => console.error('[AI] patch propiedades failed:', actGen.nombre, e?.error || e));
+      }
+
+      // ── 3. FIN ──────────────────────────────────────────────────────────────
+      const finAct = await firstValueFrom(
+        this.actividadService.create({ politicaId: this.politicaId!, nombre: 'Fin', tipo: 'FIN' })
+      ).catch((e: any) => { console.error('[AI] create FIN failed:', e?.error || e); return null as any; });
+
+      // ── 4. Transiciones: cadena lineal INICIO → T0 → T1 → … → FIN ──────────
+      // (solo usadas para validación del publish — el motor usa el BPMN XML)
+      if (inicioAct?.id && finAct?.id && createdActs.length > 0) {
+        const mkTrans = (destId: string): Transicion[] =>
+          [{ actividadDestinoId: destId, condicion: 'default', etiqueta: 'Siguiente' }];
+
+        await firstValueFrom(
+          this.actividadService.update(inicioAct.id, { transiciones: mkTrans(createdActs[0].id) })
+        ).catch(() => {});
+
+        for (let i = 0; i < createdActs.length; i++) {
+          const destId = i + 1 < createdActs.length ? createdActs[i + 1].id : finAct.id;
+          await firstValueFrom(
+            this.actividadService.update(createdActs[i].id, { transiciones: mkTrans(destId) })
+          ).catch(() => {});
+        }
+      }
+
+      this.activitiesList = [inicioAct, ...createdActs, finAct].filter(Boolean);
+      this.loadActividades();
+      this.loadDepartments();
+
+      this.applyStatus = '';
+      this.generatedWorkflow = null;
+      this.isApplying = false;
+      this.snackBar.open(`✓ Workflow aplicado: ${createdActs.length} actividades creadas`, 'OK', { duration: 5000 });
+      this.cdr.detectChanges();
+
+    } catch (e: unknown) {
+      const err = e as { error?: { message?: string }; message?: string };
+      this.applyStatus = '';
+      this.isApplying = false;
+      this.snackBar.open(
+        'Error aplicando workflow: ' + (err?.error?.message ?? err?.message ?? 'Error desconocido'),
+        'Cerrar',
+        { duration: 6000 }
+      );
+      console.error('[AI Apply] Error inesperado:', e);
+      this.cdr.detectChanges();
+    }
   }
 
   // ── UserTask Properties Panel — Sprint 3.5 ────────────────

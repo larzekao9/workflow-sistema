@@ -5,6 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/router.dart';
 
+/// Shared navigator key — passed to GoRouter so foreground FCM SnackBars work.
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+
 /// Top-level background message handler — must be a top-level function.
 /// Navigation from terminated state is handled in [_WorkflowAppState.initState].
 @pragma('vm:entry-point')
@@ -50,15 +53,19 @@ class _WorkflowAppState extends ConsumerState<WorkflowApp> {
     // ── Foreground ────────────────────────────────────────────────────────────
     // App is open: show a SnackBar with an optional "Ver" action to navigate.
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      final context = navigatorKey.currentContext;
+      final context = appNavigatorKey.currentContext;
       if (context == null) return;
 
       final title = message.notification?.title ?? 'Nueva notificación';
+      final body = message.notification?.body;
       final tramiteId = message.data['tramiteId'];
+      final displayText = body != null && body.isNotEmpty
+          ? '$title\n$body'
+          : title;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(title),
+          content: Text(displayText),
           duration: const Duration(seconds: 5),
           action: (tramiteId != null && tramiteId.isNotEmpty)
               ? SnackBarAction(
@@ -93,9 +100,6 @@ class _WorkflowAppState extends ConsumerState<WorkflowApp> {
       }
     });
   }
-
-  // Exposed so the SnackBar lookup can reach the active [BuildContext].
-  static final navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   Widget build(BuildContext context) {

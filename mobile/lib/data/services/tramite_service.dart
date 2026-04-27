@@ -103,6 +103,28 @@ class TramiteService {
     return TramiteResponse.fromJson(resp);
   }
 
+  Future<TramiteResponse> denegar(
+    String id, {
+    required String motivo,
+  }) async {
+    final resp = await _api.post('/tramites/$id/denegar', {'motivo': motivo});
+    return TramiteResponse.fromJson(resp);
+  }
+
+  Future<TramiteResponse> resolverApelacion(
+    String id, {
+    required bool aprobada,
+    String? observaciones,
+  }) async {
+    final body = <String, dynamic>{
+      'aprobada': aprobada,
+      if (observaciones != null && observaciones.isNotEmpty)
+        'observaciones': observaciones,
+    };
+    final resp = await _api.post('/tramites/$id/resolver-apelacion', body);
+    return TramiteResponse.fromJson(resp);
+  }
+
   List<TramiteResponse> _pageContent(Map<String, dynamic> resp) {
     final content = resp['content'] as List<dynamic>? ?? const [];
     return content

@@ -52,4 +52,14 @@ class TramiteRepository {
 
   Future<TramiteResponse> apelar(String id, {required String justificacion}) =>
       _service.apelar(id, justificacion: justificacion);
+
+  Future<TramiteResponse> denegar(String id, {required String motivo}) =>
+      _service.denegar(id, motivo: motivo);
+
+  Future<TramiteResponse> resolverApelacion(
+    String id, {
+    required bool aprobada,
+    String? observaciones,
+  }) =>
+      _service.resolverApelacion(id, aprobada: aprobada, observaciones: observaciones);
 }
