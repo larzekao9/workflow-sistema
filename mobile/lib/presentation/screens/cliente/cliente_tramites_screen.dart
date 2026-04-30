@@ -31,10 +31,23 @@ class ClienteTramitesScreen extends ConsumerWidget {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => context.go('/cliente/tramites/nuevo'),
-        tooltip: 'Nuevo Tramite',
-        child: const Icon(Icons.add),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FloatingActionButton.small(
+            heroTag: 'fab_chat',
+            onPressed: () => context.push('/chat'),
+            tooltip: 'Asistente Virtual',
+            child: const Icon(Icons.smart_toy_outlined),
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton(
+            heroTag: 'fab_nuevo',
+            onPressed: () => context.go('/cliente/tramites/nuevo'),
+            tooltip: 'Nuevo Tramite',
+            child: const Icon(Icons.add),
+          ),
+        ],
       ),
       body: tramitesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),

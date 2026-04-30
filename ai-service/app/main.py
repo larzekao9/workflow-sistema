@@ -7,6 +7,7 @@ from app.routers import policy_router, tramite_router, flow_router
 from app.routers import bpmn_router
 from app.routers import workflow_router
 from app.routers.workflow_router import transcribe_router
+from app.routers import chat_router
 
 settings = get_settings()
 
@@ -33,6 +34,7 @@ app.include_router(flow_router.router, prefix="/api/v1")
 app.include_router(bpmn_router.router, prefix="/ai")
 app.include_router(workflow_router.router, prefix="/ai")
 app.include_router(transcribe_router, prefix="/ai")
+app.include_router(chat_router.router, prefix="/ai")
 
 
 @app.get("/health")

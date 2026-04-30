@@ -8,6 +8,7 @@ import '../presentation/screens/cliente/cliente_tramites_screen.dart';
 import '../presentation/screens/cliente/politicas_list_screen.dart';
 import '../presentation/screens/funcionario/funcionario_bandeja_screen.dart';
 import '../presentation/screens/login/login_screen.dart';
+import '../presentation/screens/cliente/chat_screen.dart';
 import '../presentation/screens/shared/notificaciones_screen.dart';
 import '../presentation/screens/shared/tramite_detalle_screen.dart';
 
@@ -72,6 +73,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             ),
           ),
         ],
+      ),
+
+      // ── Chat / Asistente Virtual ───────────────────────────────────────────
+      GoRoute(
+        path: '/chat',
+        builder: (_, __) => const ChatScreen(),
       ),
 
       // ── Notificaciones ─────────────────────────────────────────────────────

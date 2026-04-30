@@ -20,6 +20,7 @@ import { AuthService } from './shared/services/auth.service';
 import { User } from './shared/models/user.model';
 import { NotificacionService } from './shared/services/notificacion.service';
 import { Notificacion } from './shared/models/notificacion.model';
+import { ChatbotComponent } from './shared/components/chatbot/chatbot.component';
 
 interface NavItem {
   label: string;
@@ -44,7 +45,8 @@ interface NavItem {
     MatChipsModule,
     MatTooltipModule,
     MatDividerModule,
-    MatBadgeModule
+    MatBadgeModule,
+    ChatbotComponent
   ],
   template: `
     <ng-container *ngIf="(showSidenav$ | async); else noSidenav">
@@ -191,6 +193,9 @@ interface NavItem {
           </main>
         </mat-sidenav-content>
       </mat-sidenav-container>
+
+      <!-- Chatbot FAB: fuera del sidenav-content para evitar problemas de stacking context -->
+      <app-chatbot></app-chatbot>
     </ng-container>
 
     <ng-template #noSidenav>

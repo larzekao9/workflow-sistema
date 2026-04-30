@@ -28,6 +28,8 @@ services:
       JWT_EXPIRATION: 86400000
       AI_SERVICE_URL: http://ai-service:8001
       UPLOADS_DIR: /uploads
+      TZ: America/La_Paz
+      JAVA_TOOL_OPTIONS: "-Duser.timezone=America/La_Paz"
     volumes:
       - uploads_data:/uploads
     depends_on:
